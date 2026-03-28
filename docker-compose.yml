@@ -1,0 +1,35 @@
+services:
+  dns:
+    build: .
+    working_dir: /app/dns
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5501:5173"
+
+  http:
+    build: .
+    working_dir: /app/http
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5502:5173"
+
+  mdb:
+    build: .
+    working_dir: /app/mdb
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5503:5173"
+
+  os:
+    build: .
+    working_dir: /app/os
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5504:5173"
+
+  tsc:
+    build: .
+    working_dir: /app/tsc
+    command: npx vite --host 0.0.0.0 --port 5173
+    ports:
+      - "5505:5173"
