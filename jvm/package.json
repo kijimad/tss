@@ -1,0 +1,17 @@
+{
+  "name": "jvm-ts",
+  "version": "1.0.0",
+  "description": "JVM (Java Virtual Machine) in TypeScript",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2",
+    "vitest": "^4.1.1"
+  }
+}
