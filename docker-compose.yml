@@ -1,35 +1,184 @@
+x-app: &app
+  image: node:22-slim
+  working_dir: /app
+  command: sh -c "npm install && CHOKIDAR_USEPOLLING=true npm run dev -- --host 0.0.0.0"
+
 services:
-  dns:
-    build: .
-    working_dir: /app/dns
-    command: npx vite --host 0.0.0.0 --port 5173
+  portal:
+    image: node:22-slim
+    working_dir: /app
+    command: npx serve -l 3000 .
+    volumes:
+      - ./index.html:/app/index.html:ro
     ports:
-      - "5501:5173"
+      - "3000:3000"
+
+  bios:
+    <<: *app
+    volumes: [./bios:/app]
+    ports: ["5501:5173"]
+
+  browser:
+    <<: *app
+    volumes: [./browser:/app]
+    ports: ["5502:5173"]
+
+  diskdrv:
+    <<: *app
+    volumes: [./diskdrv:/app]
+    ports: ["5503:5173"]
+
+  dns:
+    <<: *app
+    volumes: [./dns:/app]
+    ports: ["5504:5173"]
+
+  docker:
+    <<: *app
+    volumes: [./docker:/app]
+    ports: ["5505:5173"]
+
+  ecs:
+    <<: *app
+    volumes: [./ecs:/app]
+    ports: ["5506:5173"]
+
+  encoding:
+    <<: *app
+    volumes: [./encoding:/app]
+    ports: ["5507:5173"]
+
+  git:
+    <<: *app
+    volumes: [./git:/app]
+    ports: ["5508:5173"]
+
+  goc:
+    <<: *app
+    volumes: [./goc:/app]
+    ports: ["5509:5173"]
+
+  gpu:
+    <<: *app
+    volumes: [./gpu:/app]
+    ports: ["5510:5173"]
 
   http:
-    build: .
-    working_dir: /app/http
-    command: npx vite --host 0.0.0.0 --port 5173
-    ports:
-      - "5502:5173"
+    <<: *app
+    volumes: [./http:/app]
+    ports: ["5511:5173"]
+
+  jvm:
+    <<: *app
+    volumes: [./jvm:/app]
+    ports: ["5512:5173"]
 
   mdb:
-    build: .
-    working_dir: /app/mdb
-    command: npx vite --host 0.0.0.0 --port 5173
-    ports:
-      - "5503:5173"
+    <<: *app
+    volumes: [./mdb:/app]
+    ports: ["5513:5173"]
+
+  node:
+    <<: *app
+    volumes: [./node:/app]
+    ports: ["5514:5173"]
+
+  npm:
+    <<: *app
+    volumes: [./npm:/app]
+    ports: ["5515:5173"]
 
   os:
-    build: .
-    working_dir: /app/os
-    command: npx vite --host 0.0.0.0 --port 5173
-    ports:
-      - "5504:5173"
+    <<: *app
+    volumes: [./os:/app]
+    ports: ["5516:5173"]
+
+  pki:
+    <<: *app
+    volumes: [./pki:/app]
+    ports: ["5517:5173"]
+
+  prisma-sim:
+    <<: *app
+    volumes: [./prisma-sim:/app]
+    ports: ["5518:5173"]
+
+  react-sim:
+    <<: *app
+    volumes: [./react-sim:/app]
+    ports: ["5519:5173"]
+
+  routing:
+    <<: *app
+    volumes: [./routing:/app]
+    ports: ["5520:5173"]
+
+  rubyvm:
+    <<: *app
+    volumes: [./rubyvm:/app]
+    ports: ["5521:5173"]
+
+  s3:
+    <<: *app
+    volumes: [./s3:/app]
+    ports: ["5522:5173"]
+
+  shell:
+    <<: *app
+    volumes: [./shell:/app]
+    ports: ["5523:5173"]
+
+  smtp:
+    <<: *app
+    volumes: [./smtp:/app]
+    ports: ["5524:5173"]
+
+  ssh:
+    <<: *app
+    volumes: [./ssh:/app]
+    ports: ["5525:5173"]
 
   tsc:
-    build: .
-    working_dir: /app/tsc
-    command: npx vite --host 0.0.0.0 --port 5173
-    ports:
-      - "5505:5173"
+    <<: *app
+    volumes: [./tsc:/app]
+    ports: ["5526:5173"]
+
+  tss:
+    <<: *app
+    volumes: [./tss:/app]
+    ports: ["5527:5173"]
+
+  ufs:
+    <<: *app
+    volumes: [./ufs:/app]
+    ports: ["5528:5173"]
+
+  usb:
+    <<: *app
+    volumes: [./usb:/app]
+    ports: ["5529:5173"]
+
+  v8:
+    <<: *app
+    volumes: [./v8:/app]
+    ports: ["5530:5173"]
+
+  vite-sim:
+    <<: *app
+    volumes: [./vite-sim:/app]
+    ports: ["5531:5173"]
+
+  vitest-sim:
+    <<: *app
+    volumes: [./vitest-sim:/app]
+    ports: ["5532:5173"]
+
+  vterm:
+    <<: *app
+    volumes: [./vterm:/app]
+    ports: ["5533:5173"]
+
+  xwm:
+    <<: *app
+    volumes: [./xwm:/app]
+    ports: ["5534:5173"]

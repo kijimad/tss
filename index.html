@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transer Simulators</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a1a; color: #e0e0e0; font-family: 'Menlo', 'Consolas', monospace; min-height: 100vh; }
+    header { padding: 32px 0 16px; text-align: center; border-bottom: 1px solid #1a1a3a; }
+    header h1 { font-size: 22px; color: #00d4ff; letter-spacing: 2px; }
+    header p { font-size: 12px; color: #555; margin-top: 6px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+    h2 { font-size: 13px; color: #888; margin: 24px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #1a1a3a; letter-spacing: 1px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    a.card {
+      display: block; padding: 12px 14px; background: #111128; border: 1px solid #1e1e3e;
+      border-radius: 6px; text-decoration: none; color: inherit; transition: border-color .15s, background .15s;
+    }
+    a.card:hover { border-color: #00d4ff; background: #14143a; }
+    .card .name { font-size: 14px; font-weight: bold; color: #7dd3fc; }
+    .card .desc { font-size: 11px; color: #888; margin-top: 4px; line-height: 1.4; }
+    .card .port { font-size: 10px; color: #555; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Transer Simulators</h1>
+    <p>34 projects &mdash; TypeScript + Vite + Vitest</p>
+  </header>
+  <main>
+    <h2>Infra / Network</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5504"><div class="name">dns</div><div class="desc">DNS リゾルバ — 再帰解決、TTLキャッシュ</div><div class="port">:5504</div></a>
+      <a class="card" href="http://localhost:5511"><div class="name">http</div><div class="desc">TCP/IP + HTTP — Ethernet → IP → TCP → HTTP</div><div class="port">:5511</div></a>
+      <a class="card" href="http://localhost:5520"><div class="name">routing</div><div class="desc">経路制御 — AS、ダイクストラ法</div><div class="port">:5520</div></a>
+      <a class="card" href="http://localhost:5525"><div class="name">ssh</div><div class="desc">SSH プロトコル — DH鍵交換、暗号化チャネル</div><div class="port">:5525</div></a>
+      <a class="card" href="http://localhost:5524"><div class="name">smtp</div><div class="desc">メール送信 — SMTP セッション、DNS MX</div><div class="port">:5524</div></a>
+      <a class="card" href="http://localhost:5517"><div class="name">pki</div><div class="desc">公開鍵認証 — RSA、証明書チェーン、TLS</div><div class="port">:5517</div></a>
+    </div>
+
+    <h2>OS / Low-level</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5501"><div class="name">bios</div><div class="desc">BIOS POST — ハードウェア検出、MBRブート</div><div class="port">:5501</div></a>
+      <a class="card" href="http://localhost:5516"><div class="name">os</div><div class="desc">BrowserOS — 16ビットCPU、カーネル、シェル</div><div class="port">:5516</div></a>
+      <a class="card" href="http://localhost:5528"><div class="name">ufs</div><div class="desc">Unix ファイルシステム — inode、ビットマップ</div><div class="port">:5528</div></a>
+      <a class="card" href="http://localhost:5533"><div class="name">vterm</div><div class="desc">仮想端末 — PTY、VT100、ANSIカラー</div><div class="port">:5533</div></a>
+      <a class="card" href="http://localhost:5523"><div class="name">shell</div><div class="desc">Unix シェル — パイプ、リダイレクト、30+コマンド</div><div class="port">:5523</div></a>
+      <a class="card" href="http://localhost:5503"><div class="name">diskdrv</div><div class="desc">ディスクドライバ</div><div class="port">:5503</div></a>
+      <a class="card" href="http://localhost:5529"><div class="name">usb</div><div class="desc">USBドライバ — エニュメレーション、転送</div><div class="port">:5529</div></a>
+      <a class="card" href="http://localhost:5534"><div class="name">xwm</div><div class="desc">X Window Manager — Xサーバ、装飾、フォーカス</div><div class="port">:5534</div></a>
+      <a class="card" href="http://localhost:5510"><div class="name">gpu</div><div class="desc">GPU — CUDA、ワープ、レンダリングパイプライン</div><div class="port">:5510</div></a>
+      <a class="card" href="http://localhost:5507"><div class="name">encoding</div><div class="desc">文字コード — UTF-8/16、Shift_JIS、文字化け</div><div class="port">:5507</div></a>
+    </div>
+
+    <h2>Database</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5513"><div class="name">mdb</div><div class="desc">SQLite風 DB — B+Tree、SQLパーサ</div><div class="port">:5513</div></a>
+      <a class="card" href="http://localhost:5518"><div class="name">prisma-sim</div><div class="desc">Prisma ORM — スキーマ、クエリエンジン、マイグレーション</div><div class="port">:5518</div></a>
+    </div>
+
+    <h2>Language / Compiler / Runtime</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5526"><div class="name">tsc</div><div class="desc">TS トランスパイラ — レキサー → 型チェック → エミット</div><div class="port">:5526</div></a>
+      <a class="card" href="http://localhost:5530"><div class="name">v8</div><div class="desc">V8 JS エンジン — バイトコード、VM、GC</div><div class="port">:5530</div></a>
+      <a class="card" href="http://localhost:5509"><div class="name">goc</div><div class="desc">Go コンパイラ — goroutine、チャネル</div><div class="port">:5509</div></a>
+      <a class="card" href="http://localhost:5512"><div class="name">jvm</div><div class="desc">JVM — バイトコードインタプリタ</div><div class="port">:5512</div></a>
+      <a class="card" href="http://localhost:5514"><div class="name">node</div><div class="desc">Node.js — イベントループ (5フェーズ)</div><div class="port">:5514</div></a>
+      <a class="card" href="http://localhost:5521"><div class="name">rubyvm</div><div class="desc">Ruby VM (YARV) — レキサー → AST → バイトコード → VM</div><div class="port">:5521</div></a>
+    </div>
+
+    <h2>Frontend / Browser</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5519"><div class="name">react-sim</div><div class="desc">React — VDOM差分、Fiber、Hooks</div><div class="port">:5519</div></a>
+      <a class="card" href="http://localhost:5502"><div class="name">browser</div><div class="desc">ブラウザエンジン — HTML/CSSパーサ、レイアウト、描画</div><div class="port">:5502</div></a>
+    </div>
+
+    <h2>Dev Tools</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5515"><div class="name">npm</div><div class="desc">npm — semver解決、依存ツリー</div><div class="port">:5515</div></a>
+      <a class="card" href="http://localhost:5508"><div class="name">git</div><div class="desc">Git — blob/tree/commit、ブランチ、マージ</div><div class="port">:5508</div></a>
+      <a class="card" href="http://localhost:5531"><div class="name">vite-sim</div><div class="desc">Vite — ファイル変換、HMR、依存グラフ</div><div class="port">:5531</div></a>
+      <a class="card" href="http://localhost:5532"><div class="name">vitest-sim</div><div class="desc">Vitest — マッチャー、テストランナー</div><div class="port">:5532</div></a>
+      <a class="card" href="http://localhost:5505"><div class="name">docker</div><div class="desc">Docker — レイヤーFS、namespace、cgroup</div><div class="port">:5505</div></a>
+    </div>
+
+    <h2>Cloud / AWS</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5522"><div class="name">s3</div><div class="desc">Amazon S3 — バケット、オブジェクト、署名V4</div><div class="port">:5522</div></a>
+      <a class="card" href="http://localhost:5506"><div class="name">ecs</div><div class="desc">Amazon ECS — クラスタ、サービス、タスク配置</div><div class="port">:5506</div></a>
+    </div>
+
+    <h2>Other</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5527"><div class="name">tss</div><div class="desc">タスクスケジューラ</div><div class="port">:5527</div></a>
+    </div>
+  </main>
+</body>
+</html>

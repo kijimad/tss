@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browser Engine Simulator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+    .browser-sim { max-width: 1200px; margin: 0 auto; }
+    .title { text-align: center; margin-bottom: 20px; color: #e94560; }
+    .editors { display: flex; gap: 16px; margin-bottom: 16px; }
+    .editor-panel { flex: 1; }
+    .editor-panel h2 { margin-bottom: 8px; color: #0f3460; background: #e94560; padding: 4px 12px; border-radius: 4px; }
+    textarea { width: 100%; font-family: 'Fira Code', monospace; font-size: 13px; background: #16213e; color: #eee; border: 1px solid #0f3460; border-radius: 4px; padding: 12px; resize: vertical; }
+    #render-btn { display: block; margin: 0 auto 20px; padding: 10px 32px; background: #e94560; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+    #render-btn:hover { background: #c73e54; }
+    .viewers { display: flex; gap: 16px; margin-bottom: 16px; }
+    .viewer-panel { flex: 1; }
+    .viewer-panel h2 { margin-bottom: 8px; color: #16213e; background: #533483; padding: 4px 12px; border-radius: 4px; color: #fff; }
+    .viewer-content { background: #16213e; border: 1px solid #0f3460; border-radius: 4px; padding: 12px; min-height: 150px; font-size: 12px; font-family: monospace; overflow: auto; max-height: 300px; }
+    canvas { background: #fff; border: 1px solid #0f3460; border-radius: 4px; display: block; width: 100%; }
+    .tree-node { margin: 2px 0; }
+    .element-node { color: #56ccf2; }
+    .text-node { color: #f2c94c; }
+    .attr { color: #6fcf97; }
+    .computed-style { color: #888; font-size: 10px; }
+    .layout-node { color: #bb86fc; }
+    .box-model-diagram { text-align: center; }
+    .box-margin { background: rgba(255,165,0,0.2); padding: 12px; border: 1px dashed orange; border-radius: 4px; margin: 4px; }
+    .box-border { background: rgba(255,255,0,0.1); padding: 12px; border: 2px solid yellow; border-radius: 4px; margin: 4px; }
+    .box-padding { background: rgba(0,255,0,0.1); padding: 12px; border: 1px dashed green; border-radius: 4px; margin: 4px; }
+    .box-content { background: rgba(100,149,237,0.3); padding: 12px; border: 1px solid cornflowerblue; border-radius: 4px; }
+    .box-label { font-weight: bold; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { initApp } from './src/ui/app.ts';
+    initApp();
+  </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>S3 Simulator</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; color: #333; }
+      #app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+      h1 { margin-bottom: 20px; color: #232f3e; }
+      .panel { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 16px; margin-bottom: 16px; }
+      .panel h2 { font-size: 16px; margin-bottom: 12px; color: #232f3e; }
+      button { background: #ff9900; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-right: 8px; }
+      button:hover { background: #e88b00; }
+      button.danger { background: #d13212; }
+      input, select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 8px; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; }
+      th { background: #fafafa; font-weight: 600; }
+      .log-entry { font-family: monospace; font-size: 13px; padding: 4px 8px; border-bottom: 1px solid #eee; white-space: pre-wrap; }
+      .log-entry.request { color: #0073bb; }
+      .log-entry.response { color: #1a8; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/ui/app.ts"></script>
+  </body>
+</html>

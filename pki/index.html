@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PKI シミュレーター</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: "Helvetica Neue", Arial, sans-serif; background: #0a0a1a; color: #e0e0e0; padding: 20px; }
+      h1 { color: #00d4ff; margin-bottom: 20px; }
+      h2 { color: #00b8d4; margin: 16px 0 8px; border-bottom: 1px solid #1a3a4a; padding-bottom: 4px; }
+      .section { background: #111128; border: 1px solid #2a2a4a; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+      pre { background: #0d0d20; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+      button { background: #00b8d4; color: #000; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 4px; font-weight: bold; }
+      button:hover { background: #00d4ff; }
+      .cert-chain { margin-left: 20px; border-left: 2px solid #00b8d4; padding-left: 12px; }
+      .log-entry { padding: 4px 0; border-bottom: 1px solid #1a1a3a; }
+      .log-entry.client { color: #4fc3f7; }
+      .log-entry.server { color: #81c784; }
+      .error { color: #ef5350; }
+      .success { color: #66bb6a; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/ui/app.ts"></script>
+  </body>
+</html>
