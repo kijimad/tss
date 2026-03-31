@@ -1,6 +1,21 @@
 import { SshServer, SshSession, type SshEvent } from "../protocol/ssh.js";
 import { generateKeyPair } from "../crypto/crypto.js";
 
+/** プリセット例の型定義 */
+export interface SshExample {
+  label: string;
+  host: string;
+  password: string;
+  authType: "password" | "publickey";
+}
+
+/** フォームに事前入力するためのサンプル接続設定 */
+export const EXAMPLES: SshExample[] = [
+  { label: "パスワード認証", host: "user@server.example.com", password: "secret123", authType: "password" },
+  { label: "公開鍵認証", host: "admin@prod.example.com", password: "", authType: "publickey" },
+  { label: "別ユーザー", host: "root@192.168.1.1", password: "toor", authType: "password" },
+];
+
 export class SshApp {
   private session: SshSession | undefined;
   private server!: SshServer;
@@ -23,12 +38,37 @@ export class SshApp {
     header.appendChild(dots);
     const t = document.createElement("span"); t.textContent = "SSH Simulator"; t.style.cssText = "color:#10b981;font-size:12px;font-weight:600;"; header.appendChild(t);
 
+    // サンプル選択ドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "padding:2px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:11px;font-family:monospace;";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- サンプルを選択 --";
+    exampleSelect.appendChild(defaultOpt);
+    for (const [i, ex] of EXAMPLES.entries()) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = ex.label;
+      exampleSelect.appendChild(opt);
+    }
+    header.appendChild(exampleSelect);
+
     // 接続フォーム
     const hostInput = document.createElement("input"); hostInput.value = "user@192.168.1.100"; hostInput.style.cssText = "padding:2px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:11px;width:160px;font-family:monospace;";
     const passInput = document.createElement("input"); passInput.value = "password"; passInput.type = "password"; passInput.style.cssText = hostInput.style.cssText + "width:100px;";
     const connectBtn = document.createElement("button"); connectBtn.textContent = "ssh connect"; connectBtn.style.cssText = "padding:2px 12px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;";
     const pubkeyBtn = document.createElement("button"); pubkeyBtn.textContent = "ssh (pubkey)"; pubkeyBtn.style.cssText = "padding:2px 12px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;";
     header.appendChild(hostInput); header.appendChild(passInput); header.appendChild(connectBtn); header.appendChild(pubkeyBtn);
+
+    // サンプル選択時にフォームへ値をプリセットする（自動接続はしない）
+    exampleSelect.addEventListener("change", () => {
+      const idx = Number(exampleSelect.value);
+      if (Number.isNaN(idx) || exampleSelect.value === "") return;
+      const ex = EXAMPLES[idx];
+      if (!ex) return;
+      hostInput.value = ex.host;
+      passInput.value = ex.password;
+    });
     container.appendChild(header);
 
     const main = document.createElement("div");

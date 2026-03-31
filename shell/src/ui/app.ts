@@ -1,5 +1,63 @@
 import { ShellExecutor, type ShellEvent } from "../executor/executor.js";
 
+/** サンプルコマンドの型定義 */
+export interface ShellExample {
+  /** サンプル名 */
+  name: string;
+  /** 自動実行するコマンドリスト */
+  commands: string[];
+}
+
+/** プリセットされたサンプルコマンド一覧 */
+export const EXAMPLES: ShellExample[] = [
+  {
+    name: "ファイル操作",
+    commands: [
+      "ls",
+      "echo 'Hello, World!' > /tmp/hello.txt",
+      "cat /tmp/hello.txt",
+      "cp /tmp/hello.txt /tmp/hello_backup.txt",
+      "mv /tmp/hello_backup.txt /tmp/renamed.txt",
+    ],
+  },
+  {
+    name: "パイプとリダイレクト",
+    commands: [
+      "echo 'apple\\nbanana\\ncherry' | grep a",
+      "echo 'line1\\nline2\\nline3' | wc -l",
+      "echo 'hello world' > /tmp/pipe_test.txt",
+    ],
+  },
+  {
+    name: "ディレクトリ操作",
+    commands: [
+      "mkdir /tmp/mydir",
+      "cd /tmp/mydir",
+      "ls",
+      "pwd",
+    ],
+  },
+  {
+    name: "テキスト処理",
+    commands: [
+      "echo 'cherry\\napple\\nbanana' > /tmp/fruits.txt",
+      "grep a /tmp/fruits.txt",
+      "cat /tmp/fruits.txt | sort",
+      "cat /home/user/numbers.txt | head -3",
+      "cat /home/user/numbers.txt | tail -3",
+    ],
+  },
+  {
+    name: "変数とコマンド置換",
+    commands: [
+      "NAME=Alice",
+      "echo $NAME",
+      "GREETING=\"Hello, $NAME\"",
+      "echo $GREETING",
+    ],
+  },
+];
+
 export class ShellApp {
   private sh!: ShellExecutor;
   private termDiv!: HTMLElement;
@@ -19,6 +77,29 @@ export class ShellApp {
     for (const c of ["#ff5f56", "#ffbd2e", "#27c93f"]) { const d = document.createElement("div"); d.style.cssText = `width:10px;height:10px;border-radius:50%;background:${c};`; dots.appendChild(d); }
     header.appendChild(dots);
     const t = document.createElement("span"); t.textContent = "Shell Interpreter"; t.style.cssText = "color:#10b981;font-size:12px;font-weight:600;"; header.appendChild(t);
+
+    // サンプル選択用ドロップダウン
+    const select = document.createElement("select");
+    select.style.cssText = "margin-left:auto;padding:2px 8px;background:#2a2a4a;color:#e0e0e0;border:1px solid #555;border-radius:4px;font-size:11px;cursor:pointer;outline:none;";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- サンプルを選択 --";
+    select.appendChild(defaultOpt);
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = EXAMPLES[i]!.name;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => {
+      const idx = parseInt(select.value, 10);
+      if (!isNaN(idx) && EXAMPLES[idx]) {
+        this.runExample(EXAMPLES[idx]);
+      }
+      select.value = "";
+    });
+    header.appendChild(select);
+
     container.appendChild(header);
 
     const main = document.createElement("div"); main.style.cssText = "flex:1;display:flex;overflow:hidden;";
@@ -42,6 +123,41 @@ export class ShellApp {
     this.termDiv.addEventListener("keydown", (e) => this.handleKey(e));
     this.termDiv.focus();
     this.termDiv.addEventListener("click", () => this.termDiv.focus());
+  }
+
+  /** サンプルのコマンドを順次実行する */
+  private runExample(example: ShellExample): void {
+    // ターミナルをクリアしてからコマンドを順次実行
+    this.termDiv.innerHTML = "";
+    this.currentInputSpan = null;
+    this.currentCursor = null;
+    this.currentPromptLine = null;
+    this.showPrompt();
+
+    for (const cmd of example.commands) {
+      // プロンプト行にコマンドを表示（showPromptで設定済み）
+      const inputSpan = this.currentInputSpan as HTMLSpanElement | null;
+      if (inputSpan !== null) {
+        inputSpan.textContent = cmd;
+      }
+      const cursor = this.currentCursor as HTMLSpanElement | null;
+      cursor?.remove();
+      this.termDiv.appendChild(document.createElement("br"));
+
+      if (cmd.trim()) {
+        this.history.push(cmd);
+        this.historyIdx = this.history.length;
+      }
+
+      this.traceDiv.innerHTML = "";
+      const output = this.sh.execute(cmd);
+      if (output.length > 0) this.appendText(output);
+      if (this.sh.stderr.length > 0) this.appendText(this.sh.stderr, "#f87171");
+      this.showPrompt();
+    }
+
+    this.termDiv.scrollTop = this.termDiv.scrollHeight;
+    this.termDiv.focus();
   }
 
   private handleKey(e: KeyboardEvent): void {

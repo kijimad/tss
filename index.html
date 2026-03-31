@@ -26,7 +26,7 @@
 <body>
   <header>
     <h1>Transer Simulators</h1>
-    <p>34 projects &mdash; TypeScript + Vite + Vitest</p>
+    <p>49 projects &mdash; TypeScript + Vite + Vitest</p>
   </header>
   <main>
     <h2>Infra / Network</h2>
@@ -37,6 +37,8 @@
       <a class="card" href="http://localhost:5525"><div class="name">ssh</div><div class="desc">SSH プロトコル — DH鍵交換、暗号化チャネル</div><div class="port">:5525</div></a>
       <a class="card" href="http://localhost:5524"><div class="name">smtp</div><div class="desc">メール送信 — SMTP セッション、DNS MX</div><div class="port">:5524</div></a>
       <a class="card" href="http://localhost:5517"><div class="name">pki</div><div class="desc">公開鍵認証 — RSA、証明書チェーン、TLS</div><div class="port">:5517</div></a>
+      <a class="card" href="http://localhost:5541"><div class="name">secgroup</div><div class="desc">セキュリティグループ — パケットフィルタ、ステートフル FW</div><div class="port">:5541</div></a>
+      <a class="card" href="http://localhost:5542"><div class="name">dnsfilter</div><div class="desc">DNS フィルタ — ブロックリスト、カテゴリ、Pi-hole 風</div><div class="port">:5542</div></a>
     </div>
 
     <h2>OS / Low-level</h2>
@@ -51,12 +53,15 @@
       <a class="card" href="http://localhost:5534"><div class="name">xwm</div><div class="desc">X Window Manager — Xサーバ、装飾、フォーカス</div><div class="port">:5534</div></a>
       <a class="card" href="http://localhost:5510"><div class="name">gpu</div><div class="desc">GPU — CUDA、ワープ、レンダリングパイプライン</div><div class="port">:5510</div></a>
       <a class="card" href="http://localhost:5507"><div class="name">encoding</div><div class="desc">文字コード — UTF-8/16、Shift_JIS、文字化け</div><div class="port">:5507</div></a>
+      <a class="card" href="http://localhost:5539"><div class="name">syscall</div><div class="desc">システムコール — fd/プロセス/メモリ、user↔kernel 遷移</div><div class="port">:5539</div></a>
     </div>
 
     <h2>Database</h2>
     <div class="grid">
       <a class="card" href="http://localhost:5513"><div class="name">mdb</div><div class="desc">SQLite風 DB — B+Tree、SQLパーサ</div><div class="port">:5513</div></a>
       <a class="card" href="http://localhost:5518"><div class="name">prisma-sim</div><div class="desc">Prisma ORM — スキーマ、クエリエンジン、マイグレーション</div><div class="port">:5518</div></a>
+      <a class="card" href="http://localhost:5538"><div class="name">connpool</div><div class="desc">コネクションプール — ライフサイクル、キュー、タイムアウト</div><div class="port">:5538</div></a>
+      <a class="card" href="http://localhost:5545"><div class="name">dbindex</div><div class="desc">DB インデックス — B+Tree / Hash / Full Scan 比較</div><div class="port">:5545</div></a>
     </div>
 
     <h2>Language / Compiler / Runtime</h2>
@@ -67,6 +72,9 @@
       <a class="card" href="http://localhost:5512"><div class="name">jvm</div><div class="desc">JVM — バイトコードインタプリタ</div><div class="port">:5512</div></a>
       <a class="card" href="http://localhost:5514"><div class="name">node</div><div class="desc">Node.js — イベントループ (5フェーズ)</div><div class="port">:5514</div></a>
       <a class="card" href="http://localhost:5521"><div class="name">rubyvm</div><div class="desc">Ruby VM (YARV) — レキサー → AST → バイトコード → VM</div><div class="port">:5521</div></a>
+      <a class="card" href="http://localhost:5536"><div class="name">modules</div><div class="desc">モジュールシステム — CJS / ESM / AMD / UMD / SystemJS 比較</div><div class="port">:5536</div></a>
+      <a class="card" href="http://localhost:5537"><div class="name">estarget</div><div class="desc">ES Target — ES3~ESNext ダウンレベル変換比較</div><div class="port">:5537</div></a>
+      <a class="card" href="http://localhost:5540"><div class="name">tstype</div><div class="desc">TS 型システム — 型解決ステップ、ユーティリティ型、ツリー図示</div><div class="port">:5540</div></a>
     </div>
 
     <h2>Frontend / Browser</h2>
@@ -84,15 +92,26 @@
       <a class="card" href="http://localhost:5505"><div class="name">docker</div><div class="desc">Docker — レイヤーFS、namespace、cgroup</div><div class="port">:5505</div></a>
     </div>
 
+    <h2>Backend Framework</h2>
+    <div class="grid">
+      <a class="card" href="http://localhost:5535"><div class="name">nestjs</div><div class="desc">NestJS — DI、ガード、パイプ、ライフサイクル</div><div class="port">:5535</div></a>
+    </div>
+
     <h2>Cloud / AWS</h2>
     <div class="grid">
       <a class="card" href="http://localhost:5522"><div class="name">s3</div><div class="desc">Amazon S3 — バケット、オブジェクト、署名V4</div><div class="port">:5522</div></a>
       <a class="card" href="http://localhost:5506"><div class="name">ecs</div><div class="desc">Amazon ECS — クラスタ、サービス、タスク配置</div><div class="port">:5506</div></a>
+      <a class="card" href="http://localhost:5546"><div class="name">lambda</div><div class="desc">AWS Lambda — コールドスタート、同時実行、課金計算</div><div class="port">:5546</div></a>
+      <a class="card" href="http://localhost:5547"><div class="name">k8s</div><div class="desc">Kubernetes — Pod スケジューリング、ReplicaSet、Service</div><div class="port">:5547</div></a>
+      <a class="card" href="http://localhost:5548"><div class="name">awsnet</div><div class="desc">AWS VPC — サブネット、IGW、NAT、NACL、ルートテーブル</div><div class="port">:5548</div></a>
+      <a class="card" href="http://localhost:5549"><div class="name">iam</div><div class="desc">AWS IAM — ポリシー評価、Boundary、SCP、ロール</div><div class="port">:5549</div></a>
     </div>
 
     <h2>Other</h2>
     <div class="grid">
       <a class="card" href="http://localhost:5527"><div class="name">tss</div><div class="desc">タスクスケジューラ</div><div class="port">:5527</div></a>
+      <a class="card" href="http://localhost:5543"><div class="name">isdb</div><div class="desc">地上デジタル放送 — ISDB-T、OFDM、TS パケット</div><div class="port">:5543</div></a>
+      <a class="card" href="http://localhost:5544"><div class="name">train</div><div class="desc">鉄道車両 — 走行抵抗、勾配、信号、速度グラフ</div><div class="port">:5544</div></a>
     </div>
   </main>
 </body>

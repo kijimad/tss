@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { DiskDrive, createHDD, createSSD } from "../hw/disk-hardware.js";
 import { IoScheduler, SchedulerAlgorithm } from "../scheduler/io-scheduler.js";
 import { DiskDriver } from "../driver/driver.js";
+import { EXAMPLES } from "../ui/app.js";
 
 describe("ディスクハードウェア", () => {
   it("LBA → CHS 変換", () => {
@@ -157,6 +158,44 @@ describe("ディスクドライバ", () => {
     drv.write(100, new Uint8Array(512));
     expect(drv.events.filter(e => e.type === "request_submit").length).toBe(1);
     expect(drv.events.filter(e => e.type === "request_complete").length).toBe(1);
+  });
+});
+
+describe("EXAMPLES プリセット配列", () => {
+  it("5 つのプリセット例が定義されている", () => {
+    expect(EXAMPLES).toHaveLength(5);
+  });
+
+  it("各プリセットが有効な name, diskType, scheduler を持つ", () => {
+    const validDiskTypes = ["hdd", "ssd"];
+    const validSchedulers = [
+      SchedulerAlgorithm.FIFO,
+      SchedulerAlgorithm.SSTF,
+      SchedulerAlgorithm.SCAN,
+      SchedulerAlgorithm.CSCAN,
+    ];
+
+    for (const ex of EXAMPLES) {
+      expect(ex.name).toBeTruthy();
+      expect(validDiskTypes).toContain(ex.diskType);
+      expect(validSchedulers).toContain(ex.scheduler);
+    }
+  });
+
+  it("HDD プリセットが 4 つ、SSD プリセットが 1 つ存在する", () => {
+    const hddExamples = EXAMPLES.filter(ex => ex.diskType === "hdd");
+    const ssdExamples = EXAMPLES.filter(ex => ex.diskType === "ssd");
+    expect(hddExamples).toHaveLength(4);
+    expect(ssdExamples).toHaveLength(1);
+  });
+
+  it("プリセットのディスクタイプでドライバを初期化できる", () => {
+    for (const ex of EXAMPLES) {
+      const spec = ex.diskType === "ssd" ? createSSD() : createHDD();
+      const drv = new DiskDriver(spec, ex.scheduler);
+      expect(drv).toBeDefined();
+      expect(drv.drive.spec.name).toBeTruthy();
+    }
   });
 });
 

@@ -1,5 +1,87 @@
 import { Git } from "../commands/git.js";
 
+/** サンプルシナリオの型定義 */
+interface Example {
+  name: string;
+  commands: string[];
+}
+
+/** プリセットのサンプルシナリオ一覧 */
+export const EXAMPLES: Example[] = [
+  {
+    name: "基本: init → add → commit",
+    commands: [
+      "git init",
+      'echo "hello" > file.txt',
+      "git add file.txt",
+      'git commit -m initial',
+    ],
+  },
+  {
+    name: "ブランチとマージ",
+    commands: [
+      "git init",
+      'echo "main content" > main.txt',
+      "git add main.txt",
+      'git commit -m "main commit"',
+      "git branch feature",
+      "git checkout feature",
+      'echo "feature work" > feature.txt',
+      "git add feature.txt",
+      'git commit -m "add feature"',
+      "git checkout main",
+      "git merge feature",
+    ],
+  },
+  {
+    name: "コンフリクト解消",
+    commands: [
+      "git init",
+      'echo "original" > file.txt',
+      "git add file.txt",
+      'git commit -m "initial"',
+      "git branch feature",
+      'echo "main change" > file.txt',
+      "git add file.txt",
+      'git commit -m "main change"',
+      "git checkout feature",
+      'echo "feature change" > file.txt',
+      "git add file.txt",
+      'git commit -m "feature change"',
+      "git checkout main",
+      "git merge feature",
+      "git status",
+    ],
+  },
+  {
+    name: "タグ付け",
+    commands: [
+      "git init",
+      'echo "v1" > app.txt',
+      "git add app.txt",
+      'git commit -m "release v1"',
+      "git tag v1.0",
+      'echo "v2" > app.txt',
+      "git add app.txt",
+      'git commit -m "release v2"',
+      "git tag v2.0",
+      "git log",
+    ],
+  },
+  {
+    name: "diff の確認",
+    commands: [
+      "git init",
+      'echo "line1" > doc.txt',
+      "git add doc.txt",
+      'git commit -m "add doc"',
+      'echo "line1 changed" > doc.txt',
+      "git diff",
+      "git status",
+    ],
+  },
+];
+
 export class GitApp {
   private git!: Git;
   private termDiv!: HTMLElement;
@@ -29,6 +111,31 @@ export class GitApp {
     titleSpan.textContent = "Git Simulator";
     titleSpan.style.cssText = "color:#f34f29;font-size:12px;font-weight:600;";
     header.appendChild(titleSpan);
+
+    // サンプルシナリオ選択ドロップダウン
+    const select = document.createElement("select");
+    select.style.cssText =
+      "margin-left:auto;padding:2px 6px;background:#16213e;color:#e0e0e0;border:1px solid #555;border-radius:4px;font-size:11px;cursor:pointer;outline:none;";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- サンプルを選択 --";
+    select.appendChild(defaultOpt);
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = EXAMPLES[i]!.name;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => {
+      const idx = Number(select.value);
+      if (!Number.isNaN(idx) && EXAMPLES[idx] !== undefined) {
+        this.runExample(EXAMPLES[idx]);
+      }
+      // 選択をリセットして再度同じ項目を選べるようにする
+      select.value = "";
+    });
+    header.appendChild(select);
+
     container.appendChild(header);
 
     const main = document.createElement("div");
@@ -79,6 +186,56 @@ export class GitApp {
     this.termDiv.addEventListener("keydown", (e) => this.handleKey(e));
     this.termDiv.focus();
     this.termDiv.addEventListener("click", () => this.termDiv.focus());
+  }
+
+  /** サンプルシナリオを実行する（状態をリセットしてコマンドを順次実行） */
+  private runExample(example: Example): void {
+    // ターミナルとUIの状態をリセット
+    this.resetTerminal();
+
+    // Git の状態を完全にリセット
+    this.git = new Git();
+    this.git.init();
+
+    this.appendText(`--- サンプル: ${example.name} ---\n\n`);
+
+    // コマンドを順次実行
+    for (const cmd of example.commands) {
+      this.runSingleCommand(cmd);
+    }
+
+    this.updateSidebar();
+    this.showPrompt();
+    this.termDiv.scrollTop = this.termDiv.scrollHeight;
+    this.termDiv.focus();
+  }
+
+  /** ターミナル表示と入力状態をリセットする */
+  private resetTerminal(): void {
+    this.termDiv.innerHTML = "";
+    this.currentInputSpan = null;
+    this.currentCursor = null;
+    this.currentPromptLine = null;
+    this.inputLine = "";
+    this.history = [];
+    this.historyIdx = -1;
+  }
+
+  /** プロンプト付きで単一コマンドを表示・実行する */
+  private runSingleCommand(cmd: string): void {
+    this.showPrompt();
+    if (this.currentInputSpan !== null) {
+      this.currentInputSpan.textContent = cmd;
+    }
+    // カーソルを除去してから改行
+    this.currentCursor?.remove();
+    this.termDiv.appendChild(document.createElement("br"));
+    this.currentInputSpan = null;
+    this.currentPromptLine = null;
+
+    this.history.push(cmd);
+    this.historyIdx = this.history.length;
+    this.executeCommand(cmd.trim());
   }
 
   private handleKey(e: KeyboardEvent): void {

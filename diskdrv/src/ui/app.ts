@@ -2,6 +2,22 @@ import { createHDD, createSSD } from "../hw/disk-hardware.js";
 import { DiskDriver, type DriverEvent } from "../driver/driver.js";
 import { SchedulerAlgorithm } from "../scheduler/io-scheduler.js";
 
+/** プリセット例の型定義 */
+export interface Example {
+  name: string;
+  diskType: string;
+  scheduler: SchedulerAlgorithm;
+}
+
+/** プリセット例の配列 */
+export const EXAMPLES: Example[] = [
+  { name: "HDD + FIFO", diskType: "hdd", scheduler: SchedulerAlgorithm.FIFO },
+  { name: "HDD + SSTF", diskType: "hdd", scheduler: SchedulerAlgorithm.SSTF },
+  { name: "HDD + SCAN", diskType: "hdd", scheduler: SchedulerAlgorithm.SCAN },
+  { name: "HDD + C-SCAN", diskType: "hdd", scheduler: SchedulerAlgorithm.CSCAN },
+  { name: "SSD + FIFO", diskType: "ssd", scheduler: SchedulerAlgorithm.FIFO },
+];
+
 export class DiskDrvApp {
   private driver!: DiskDriver;
   private canvas!: HTMLCanvasElement;
@@ -16,6 +32,12 @@ export class DiskDrvApp {
     const header = document.createElement("div");
     header.style.cssText = "padding:8px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1e293b;flex-wrap:wrap;";
     const title = document.createElement("h1"); title.textContent = "Disk Driver + I/O Scheduler"; title.style.cssText = "margin:0;font-size:15px;color:#f59e0b;"; header.appendChild(title);
+
+    // プリセット例セレクタ
+    const exampleSelect = document.createElement("select"); exampleSelect.style.cssText = "padding:3px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:12px;";
+    const defaultOpt = document.createElement("option"); defaultOpt.value = ""; defaultOpt.textContent = "-- Examples --"; defaultOpt.disabled = true; defaultOpt.selected = true; exampleSelect.appendChild(defaultOpt);
+    for (let i = 0; i < EXAMPLES.length; i++) { const ex = EXAMPLES[i]!; const o = document.createElement("option"); o.value = String(i); o.textContent = ex.name; exampleSelect.appendChild(o); }
+    header.appendChild(exampleSelect);
 
     // ディスク種類
     const diskSelect = document.createElement("select"); diskSelect.style.cssText = "padding:3px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:12px;";
@@ -64,6 +86,15 @@ export class DiskDrvApp {
 
     diskSelect.addEventListener("change", () => this.initDriver(diskSelect.value, algoSelect.value));
     algoSelect.addEventListener("change", () => this.initDriver(diskSelect.value, algoSelect.value));
+
+    // プリセット例の選択時にディスク種類とスケジューラを反映
+    exampleSelect.addEventListener("change", () => {
+      const ex = EXAMPLES[Number(exampleSelect.value)];
+      if (ex === undefined) return;
+      diskSelect.value = ex.diskType;
+      algoSelect.value = ex.scheduler;
+      this.initDriver(diskSelect.value, algoSelect.value);
+    });
 
     randomBtn.addEventListener("click", () => {
       this.initDriver(diskSelect.value, algoSelect.value);

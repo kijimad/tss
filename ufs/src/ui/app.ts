@@ -3,6 +3,67 @@ import { UnixFS } from "../fs/filesystem.js";
 import { InodeMode, type DirEntry, type FsEvent } from "../fs/types.js";
 import { BLOCK_SIZE, TOTAL_BLOCKS, DATA_BLOCK_START } from "../hw/disk.js";
 
+/** サンプルコマンド集: ドロップダウンから選択して自動実行できる */
+export const EXAMPLES: { name: string; commands: string[] }[] = [
+  {
+    name: "ファイル作成と読み取り",
+    commands: [
+      "touch /home/hello.txt",
+      "write /home/hello.txt Hello, Unix File System!",
+      "cat /home/hello.txt",
+      "stat /home/hello.txt",
+    ],
+  },
+  {
+    name: "ディレクトリ構造",
+    commands: [
+      "mkdir /home/user",
+      "mkdir /home/user/docs",
+      "cd /home/user",
+      "pwd",
+      "touch docs/readme.txt",
+      "ls",
+      "ls docs",
+      "cd /",
+    ],
+  },
+  {
+    name: "inode と統計",
+    commands: [
+      "touch /tmp/data.bin",
+      "write /tmp/data.bin This is a test file with some content",
+      "stat /tmp/data.bin",
+      "df",
+    ],
+  },
+  {
+    name: "ファイル削除と領域解放",
+    commands: [
+      "touch /tmp/removeme.txt",
+      "write /tmp/removeme.txt Temporary data that will be removed",
+      "df",
+      "rm /tmp/removeme.txt",
+      "df",
+    ],
+  },
+  {
+    name: "ネストしたディレクトリ",
+    commands: [
+      "mkdir /home/project",
+      "mkdir /home/project/src",
+      "mkdir /home/project/src/utils",
+      "cd /home/project/src/utils",
+      "pwd",
+      "touch index.ts",
+      "write index.ts export function hello() { return 42; }",
+      "cat index.ts",
+      "cd ..",
+      "ls utils",
+      "cd /",
+    ],
+  },
+];
+
 export class UfsApp {
   private disk!: BlockDevice;
   private fs!: UnixFS;
@@ -36,6 +97,31 @@ export class UfsApp {
     titleSpan.textContent = "Unix File System";
     titleSpan.style.cssText = "color:#888;font-size:12px;";
     header.appendChild(titleSpan);
+
+    // サンプル選択ドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText =
+      "margin-left:auto;padding:2px 8px;font-size:11px;font-family:inherit;" +
+      "background:#16213e;color:#e0e0e0;border:1px solid #444;border-radius:4px;cursor:pointer;outline:none;";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- サンプルを選択 --";
+    exampleSelect.appendChild(defaultOpt);
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = EXAMPLES[i]!.name;
+      exampleSelect.appendChild(opt);
+    }
+    exampleSelect.addEventListener("change", () => {
+      const idx = Number(exampleSelect.value);
+      if (!Number.isNaN(idx) && EXAMPLES[idx]) {
+        this.runExample(EXAMPLES[idx]!.commands);
+      }
+      exampleSelect.value = "";
+    });
+    header.appendChild(exampleSelect);
+
     container.appendChild(header);
 
     // メインエリア
@@ -301,6 +387,27 @@ export class UfsApp {
       this.termDiv.insertBefore(span, this.currentPromptLine);
     } else {
       this.termDiv.appendChild(span);
+    }
+    this.termDiv.scrollTop = this.termDiv.scrollHeight;
+  }
+
+  /** サンプルのコマンド列を順次実行する */
+  private runExample(commands: string[]): void {
+    for (const cmd of commands) {
+      // 現在のプロンプト行にコマンドを表示
+      if (this.currentInputSpan) {
+        this.currentInputSpan.textContent = cmd;
+      }
+      this.currentCursor?.remove();
+      this.termDiv.appendChild(document.createElement("br"));
+      this.currentInputSpan = null;
+      this.currentPromptLine = null;
+
+      this.fs.resetEvents();
+      this.eventsDiv.innerHTML = "";
+      this.executeCommand(cmd.trim());
+      this.updateSidebar();
+      this.showPrompt();
     }
     this.termDiv.scrollTop = this.termDiv.scrollHeight;
   }

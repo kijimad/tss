@@ -1,6 +1,24 @@
 import { createDefaultHardware, createFaultyHardware } from "../hw/hardware.js";
 import { BiosPost, type PostEvent } from "../bios/post.js";
 
+/** プリセット例の型定義 */
+export interface Example {
+  /** 表示名 */
+  name: string;
+  /** ハードウェアモード: "normal" または "faulty" */
+  mode: "normal" | "faulty";
+  /** スピードスライダーの値 */
+  speed: number;
+}
+
+/** プリセット例の一覧 */
+export const EXAMPLES: Example[] = [
+  { name: "正常起動 (低速)", mode: "normal", speed: 250 },
+  { name: "正常起動 (高速)", mode: "normal", speed: 10 },
+  { name: "故障RAM検出", mode: "faulty", speed: 250 },
+  { name: "故障RAM (高速)", mode: "faulty", speed: 10 },
+];
+
 export class BiosApp {
   private screenDiv!: HTMLElement;
   private hwInfoDiv!: HTMLElement;
@@ -19,6 +37,30 @@ export class BiosApp {
     speedLabel.textContent = "Speed:";
     const speedSlider = document.createElement("input"); speedSlider.type = "range"; speedSlider.min = "0"; speedSlider.max = "300"; speedSlider.value = "50"; speedLabel.appendChild(speedSlider);
     header.appendChild(speedLabel);
+
+    // プリセット選択用ドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "padding:4px 8px;background:#1a1a1a;color:#aaa;border:1px solid #555;border-radius:4px;font-size:12px;cursor:pointer;";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- プリセット例 --";
+    exampleSelect.appendChild(defaultOption);
+    for (const example of EXAMPLES) {
+      const opt = document.createElement("option");
+      opt.value = String(EXAMPLES.indexOf(example));
+      opt.textContent = example.name;
+      exampleSelect.appendChild(opt);
+    }
+    // プリセット選択時にスライダー値を反映する
+    exampleSelect.addEventListener("change", () => {
+      const idx = Number(exampleSelect.value);
+      if (Number.isNaN(idx) || exampleSelect.value === "") return;
+      const preset = EXAMPLES[idx];
+      if (preset === undefined) return;
+      speedSlider.value = String(preset.speed);
+    });
+    header.appendChild(exampleSelect);
+
     container.appendChild(header);
 
     const main = document.createElement("div"); main.style.cssText = "flex:1;display:flex;overflow:hidden;";

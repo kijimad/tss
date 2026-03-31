@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { expect as simExpect } from "../matchers/expect.js";
 import { TestRunner } from "../runner/runner.js";
+import { EXAMPLES } from "../ui/app.js";
 
 describe("マッチャー (expect)", () => {
   it("toBe: 同値", () => {
@@ -181,5 +182,67 @@ describe("テストランナー", () => {
       `,
     }]);
     expect(results[0]?.passed).toBe(1);
+  });
+});
+
+describe("EXAMPLES サンプルコード", () => {
+  it("5つのサンプルが定義されている", () => {
+    expect(EXAMPLES).toHaveLength(5);
+  });
+
+  it("各サンプルにラベルとファイルがある", () => {
+    for (const example of EXAMPLES) {
+      expect(example.label).toBeTruthy();
+      expect(example.files.length).toBeGreaterThan(0);
+      for (const file of example.files) {
+        expect(file.path).toBeTruthy();
+        expect(file.code).toBeTruthy();
+      }
+    }
+  });
+
+  it("基本的なテスト: 全テストが成功する", () => {
+    const runner = new TestRunner();
+    const example = EXAMPLES.find(e => e.label === "基本的なテスト");
+    expect(example).toBeDefined();
+    const results = runner.runFiles(example!.files);
+    expect(results[0]?.failed).toBe(0);
+    expect(results[0]?.passed).toBeGreaterThan(0);
+  });
+
+  it("非同期テスト: 全テストが成功する", () => {
+    const runner = new TestRunner();
+    const example = EXAMPLES.find(e => e.label === "非同期テスト");
+    expect(example).toBeDefined();
+    const results = runner.runFiles(example!.files);
+    expect(results[0]?.failed).toBe(0);
+    expect(results[0]?.passed).toBeGreaterThan(0);
+  });
+
+  it("モック: 全テストが成功する", () => {
+    const runner = new TestRunner();
+    const example = EXAMPLES.find(e => e.label === "モック");
+    expect(example).toBeDefined();
+    const results = runner.runFiles(example!.files);
+    expect(results[0]?.failed).toBe(0);
+    expect(results[0]?.passed).toBeGreaterThan(0);
+  });
+
+  it("describe ネスト: 全テストが成功する", () => {
+    const runner = new TestRunner();
+    const example = EXAMPLES.find(e => e.label === "describe ネスト");
+    expect(example).toBeDefined();
+    const results = runner.runFiles(example!.files);
+    expect(results[0]?.failed).toBe(0);
+    expect(results[0]?.passed).toBeGreaterThan(0);
+  });
+
+  it("スナップショット: 全テストが成功する", () => {
+    const runner = new TestRunner();
+    const example = EXAMPLES.find(e => e.label === "スナップショット");
+    expect(example).toBeDefined();
+    const results = runner.runFiles(example!.files);
+    expect(results[0]?.failed).toBe(0);
+    expect(results[0]?.passed).toBeGreaterThan(0);
   });
 });

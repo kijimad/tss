@@ -1,5 +1,69 @@
 import { Algorithm, Task } from "./scheduler";
 
+// プリセット例の型定義
+export interface Example {
+  name: string;
+  algorithm: Algorithm;
+  tasks: Omit<Task, "id" | "color">[];
+  timeQuantum?: number;
+}
+
+// プリセット例の一覧
+export const EXAMPLES: Example[] = [
+  {
+    name: "FCFS 基本",
+    algorithm: "fcfs",
+    tasks: [
+      { name: "P1", burstTime: 6, arrivalTime: 0, priority: 1 },
+      { name: "P2", burstTime: 4, arrivalTime: 1, priority: 1 },
+      { name: "P3", burstTime: 2, arrivalTime: 3, priority: 1 },
+      { name: "P4", burstTime: 5, arrivalTime: 5, priority: 1 },
+    ],
+  },
+  {
+    name: "SJF プリエンプティブ",
+    algorithm: "sjf",
+    tasks: [
+      { name: "P1", burstTime: 8, arrivalTime: 0, priority: 1 },
+      { name: "P2", burstTime: 2, arrivalTime: 1, priority: 1 },
+      { name: "P3", burstTime: 4, arrivalTime: 2, priority: 1 },
+      { name: "P4", burstTime: 1, arrivalTime: 3, priority: 1 },
+    ],
+  },
+  {
+    name: "優先度スケジューリング",
+    algorithm: "priority",
+    tasks: [
+      { name: "P1", burstTime: 5, arrivalTime: 0, priority: 3 },
+      { name: "P2", burstTime: 3, arrivalTime: 0, priority: 1 },
+      { name: "P3", burstTime: 8, arrivalTime: 0, priority: 4 },
+      { name: "P4", burstTime: 2, arrivalTime: 0, priority: 2 },
+    ],
+  },
+  {
+    name: "ラウンドロビン (量子=2)",
+    algorithm: "roundRobin",
+    timeQuantum: 2,
+    tasks: [
+      { name: "P1", burstTime: 5, arrivalTime: 0, priority: 1 },
+      { name: "P2", burstTime: 3, arrivalTime: 1, priority: 1 },
+      { name: "P3", burstTime: 6, arrivalTime: 2, priority: 1 },
+      { name: "P4", burstTime: 4, arrivalTime: 3, priority: 1 },
+    ],
+  },
+  {
+    name: "ラウンドロビン (量子=4)",
+    algorithm: "roundRobin",
+    timeQuantum: 4,
+    tasks: [
+      { name: "P1", burstTime: 7, arrivalTime: 0, priority: 1 },
+      { name: "P2", burstTime: 3, arrivalTime: 1, priority: 1 },
+      { name: "P3", burstTime: 5, arrivalTime: 2, priority: 1 },
+      { name: "P4", burstTime: 4, arrivalTime: 4, priority: 1 },
+    ],
+  },
+];
+
 const TASK_COLORS = [
   "#4fc3f7", "#81c784", "#ffb74d", "#e57373",
   "#ba68c8", "#4dd0e1", "#fff176", "#f06292",
@@ -12,6 +76,7 @@ let nextId = 1;
 export function buildUI(root: HTMLElement): {
   canvas: HTMLCanvasElement;
   algorithmSelect: HTMLSelectElement;
+  exampleSelect: HTMLSelectElement;
   quantumInput: HTMLInputElement;
   quantumLabel: HTMLElement;
   taskListEl: HTMLElement;
@@ -93,10 +158,27 @@ export function buildUI(root: HTMLElement): {
   quantumInput.style.width = "60px";
   quantumInput.style.display = "none";
 
+  // プリセット例選択
+  const exampleLabel = document.createElement("label");
+  exampleLabel.textContent = "プリセット:";
+  const exampleSelect = document.createElement("select");
+  const defaultOpt = document.createElement("option");
+  defaultOpt.value = "";
+  defaultOpt.textContent = "-- 選択 --";
+  exampleSelect.appendChild(defaultOpt);
+  for (let i = 0; i < EXAMPLES.length; i++) {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = EXAMPLES[i]!.name;
+    exampleSelect.appendChild(opt);
+  }
+
   controls.appendChild(algoLabel);
   controls.appendChild(algorithmSelect);
   controls.appendChild(quantumLabel);
   controls.appendChild(quantumInput);
+  controls.appendChild(exampleLabel);
+  controls.appendChild(exampleSelect);
   root.appendChild(controls);
 
   // タスクリスト
@@ -234,9 +316,35 @@ export function buildUI(root: HTMLElement): {
 
   addTaskBtn.addEventListener("click", () => addTaskRow());
 
+  // プリセット例選択時にフォームを反映する
+  exampleSelect.addEventListener("change", () => {
+    const idx = parseInt(exampleSelect.value, 10);
+    if (Number.isNaN(idx) || idx < 0 || idx >= EXAMPLES.length) return;
+    const example = EXAMPLES[idx]!;
+
+    // アルゴリズムを設定
+    algorithmSelect.value = example.algorithm;
+    algorithmSelect.dispatchEvent(new Event("change"));
+
+    // タイムクォンタムを設定
+    if (example.timeQuantum !== undefined) {
+      quantumInput.value = String(example.timeQuantum);
+    }
+
+    // 既存タスク行をすべて削除
+    taskRows.length = 0;
+    taskListEl.innerHTML = "";
+
+    // プリセットのタスクを追加
+    for (const task of example.tasks) {
+      addTaskRow(task);
+    }
+  });
+
   return {
     canvas,
     algorithmSelect,
+    exampleSelect,
     quantumInput,
     quantumLabel,
     taskListEl,

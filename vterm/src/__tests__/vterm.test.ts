@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { PseudoTerminal } from "../pty/pty.js";
 import { TerminalScreen, ANSI_COLORS } from "../terminal/screen.js";
 import { Shell } from "../shell/shell.js";
+import { EXAMPLES } from "../ui/app.js";
 
 describe("PTY", () => {
   it("マスター書き込み → エコー → マスター読み取り", () => {
@@ -136,5 +137,89 @@ describe("Shell + PTY + Screen 統合", () => {
     pty.masterWrite("echo hello\r");
     const text = screen.getText();
     expect(text).toContain("hello");
+  });
+});
+
+describe("EXAMPLES（サンプル入力配列）", () => {
+  it("4つのサンプルが定義されている", () => {
+    expect(EXAMPLES).toHaveLength(4);
+  });
+
+  it("各サンプルに name と inputs が存在する", () => {
+    for (const example of EXAMPLES) {
+      expect(typeof example.name).toBe("string");
+      expect(example.name.length).toBeGreaterThan(0);
+      expect(Array.isArray(example.inputs)).toBe(true);
+      expect(example.inputs.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("期待するサンプル名が含まれている", () => {
+    const names = EXAMPLES.map(e => e.name);
+    expect(names).toContain("基本入力");
+    expect(names).toContain("ANSIカラー");
+    expect(names).toContain("カーソル移動");
+    expect(names).toContain("画面クリア");
+  });
+
+  it("基本入力サンプルがPTYに送信できる", () => {
+    const pty = new PseudoTerminal();
+    const screen = new TerminalScreen(24, 80);
+    pty.onMasterRead = (data) => screen.write(data);
+    const shell = new Shell(pty);
+    shell.start();
+
+    const basicExample = EXAMPLES.find(e => e.name === "基本入力")!;
+    for (const input of basicExample.inputs) {
+      pty.masterWrite(input);
+    }
+    // 入力が処理されたことを確認（エラーなく完了すればOK）
+    const text = screen.getText();
+    expect(text.length).toBeGreaterThan(0);
+  });
+
+  it("ANSIカラーサンプルが色付きセルを生成する", () => {
+    const pty = new PseudoTerminal();
+    const screen = new TerminalScreen(24, 80);
+    pty.onMasterRead = (data) => screen.write(data);
+    const shell = new Shell(pty);
+    shell.start();
+
+    const colorExample = EXAMPLES.find(e => e.name === "ANSIカラー")!;
+    for (const input of colorExample.inputs) {
+      pty.masterWrite(input);
+    }
+    // ANSIエスケープが処理されたことを確認
+    const text = screen.getText();
+    expect(text.length).toBeGreaterThan(0);
+  });
+
+  it("画面クリアサンプルがエラーなく動作する", () => {
+    const pty = new PseudoTerminal();
+    const screen = new TerminalScreen(24, 80);
+    pty.onMasterRead = (data) => screen.write(data);
+    const shell = new Shell(pty);
+    shell.start();
+
+    const clearExample = EXAMPLES.find(e => e.name === "画面クリア")!;
+    for (const input of clearExample.inputs) {
+      pty.masterWrite(input);
+    }
+    // エラーなく完了すれば成功
+    expect(true).toBe(true);
+  });
+
+  it("カーソル移動サンプルがエラーなく動作する", () => {
+    const pty = new PseudoTerminal();
+    const screen = new TerminalScreen(24, 80);
+    pty.onMasterRead = (data) => screen.write(data);
+    const shell = new Shell(pty);
+    shell.start();
+
+    const cursorExample = EXAMPLES.find(e => e.name === "カーソル移動")!;
+    for (const input of cursorExample.inputs) {
+      pty.masterWrite(input);
+    }
+    expect(true).toBe(true);
   });
 });

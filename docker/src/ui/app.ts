@@ -1,6 +1,48 @@
 import { DockerEngine, type EngineEvent, type Container, ContainerState } from "../engine/engine.js";
 import type { BuildEvent } from "../image/image.js";
 
+/** サンプルコマンドの例 */
+export interface Example {
+  /** 表示名 */
+  name: string;
+  /** 順番に自動実行するコマンド一覧 */
+  commands: string[];
+}
+
+/** セレクトボックスに表示するサンプル例の配列 */
+export const EXAMPLES: Example[] = [
+  {
+    name: "イメージ取得 + 実行",
+    commands: ["docker pull ubuntu:22.04", "docker run --name my-ubuntu ubuntu:22.04"],
+  },
+  {
+    name: "ポートマッピング",
+    commands: ["docker pull nginx:latest", "docker run --name web-server -p 8080:80 nginx:latest"],
+  },
+  {
+    name: "環境変数の設定",
+    commands: [
+      "docker pull node:20",
+      "docker run --name app-server -e NODE_ENV=production -e PORT=3000 node:20",
+    ],
+  },
+  {
+    name: "コンテナ管理",
+    commands: [
+      "docker pull ubuntu:22.04",
+      "docker run --name temp-container ubuntu:22.04",
+      "docker ps -a",
+      "docker stop temp-container",
+      "docker rm temp-container",
+      "docker ps -a",
+    ],
+  },
+  {
+    name: "Dockerfile ビルド",
+    commands: ["docker build -t node-app", "docker images"],
+  },
+];
+
 export class DockerApp {
   private engine!: DockerEngine;
   private termDiv!: HTMLElement;
@@ -22,6 +64,34 @@ export class DockerApp {
     for (const c of ["#ff5f56", "#ffbd2e", "#27c93f"]) { const d = document.createElement("div"); d.style.cssText = `width:10px;height:10px;border-radius:50%;background:${c};`; dots.appendChild(d); }
     header.appendChild(dots);
     const t = document.createElement("span"); t.textContent = "Docker Engine"; t.style.cssText = "color:#2496ED;font-size:12px;font-weight:600;"; header.appendChild(t);
+
+    // サンプル例を選択するドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText =
+      "margin-left:auto;padding:2px 8px;font-size:11px;background:#0c0c0c;color:#e0e0e0;border:1px solid #555;border-radius:4px;cursor:pointer;outline:none;";
+    // デフォルトの選択肢
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- サンプルを選択 --";
+    exampleSelect.appendChild(defaultOpt);
+    // 各サンプル例をオプションとして追加
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = EXAMPLES[i]!.name;
+      exampleSelect.appendChild(opt);
+    }
+    // 選択変更時にサンプルコマンドを順番に自動実行
+    exampleSelect.addEventListener("change", () => {
+      const idx = Number(exampleSelect.value);
+      if (!Number.isNaN(idx) && EXAMPLES[idx] !== undefined) {
+        this.runExample(EXAMPLES[idx]!);
+      }
+      // セレクトをデフォルトに戻す
+      exampleSelect.value = "";
+    });
+    header.appendChild(exampleSelect);
+
     container.appendChild(header);
 
     const main = document.createElement("div");
@@ -54,6 +124,47 @@ export class DockerApp {
     this.termDiv.addEventListener("keydown", (e) => this.handleKey(e));
     this.termDiv.focus();
     this.termDiv.addEventListener("click", () => this.termDiv.focus());
+  }
+
+  /** 入力スパンにコマンドを設定し、次の行に進める */
+  private setInputAndAdvance(cmd: string): void {
+    if (this.currentInputSpan !== null) {
+      this.currentInputSpan.textContent = cmd;
+    }
+    this.currentCursor?.remove();
+    this.termDiv.appendChild(document.createElement("br"));
+    this.currentInputSpan = null;
+    this.currentPromptLine = null;
+  }
+
+  /** サンプル例のコマンドを順番に自動実行する */
+  private runExample(example: Example): void {
+    // ターミナルをクリア
+    this.termDiv.innerHTML = "";
+    this.currentInputSpan = null;
+    this.currentCursor = null;
+    this.currentPromptLine = null;
+
+    this.appendText(`--- ${example.name} ---\n\n`, "#2496ED");
+
+    // 各コマンドを順番に実行
+    for (const cmd of example.commands) {
+      this.showPrompt();
+      // showPrompt() が currentInputSpan と currentCursor を再設定する
+      this.setInputAndAdvance(cmd);
+
+      // 履歴に追加
+      this.history.push(cmd);
+      this.historyIdx = this.history.length;
+
+      this.execute(cmd);
+      this.updateContainers();
+    }
+
+    // 最後に新しいプロンプトを表示
+    this.showPrompt();
+    this.termDiv.scrollTop = this.termDiv.scrollHeight;
+    this.termDiv.focus();
   }
 
   private handleKey(e: KeyboardEvent): void {

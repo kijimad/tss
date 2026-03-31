@@ -4,6 +4,40 @@
 import { Kernel } from "../kernel/kernel.js";
 import { Shell } from "../shell/shell.js";
 
+/** サンプルコマンド集の型定義 */
+interface Example {
+  /** ドロップダウンに表示する名前 */
+  name: string;
+  /** 順次実行するコマンドのリスト */
+  commands: string[];
+}
+
+/** ドロップダウンから選べるサンプルコマンド集 */
+export const EXAMPLES: Example[] = [
+  {
+    name: "基本コマンド",
+    commands: ["help", "ls /", "echo Hello BrowserOS!", "cat /etc/hostname"],
+  },
+  {
+    name: "ファイルシステム",
+    commands: [
+      "mkdir /tmp/demo",
+      "touch /tmp/demo/empty.txt",
+      "write /tmp/demo/note.txt これはテストです",
+      "ls /tmp/demo",
+      "cat /tmp/demo/note.txt",
+    ],
+  },
+  {
+    name: "プロセス管理",
+    commands: ["ps", "run hello", "run counter", "ps"],
+  },
+  {
+    name: "システム情報",
+    commands: ["uname", "pwd", "stat /bin/hello", "ls /bin"],
+  },
+];
+
 export class OsApp {
   private kernel!: Kernel;
   private shell!: Shell;
@@ -35,6 +69,33 @@ export class OsApp {
     titleSpan.textContent = "BrowserOS Terminal";
     titleSpan.style.cssText = "color:#888;font-size:12px;";
     header.appendChild(titleSpan);
+
+    // サンプル選択ドロップダウン
+    const select = document.createElement("select");
+    select.style.cssText =
+      "margin-left:auto;padding:4px 8px;background:#2a2a3e;color:#e0e0e0;border:1px solid #555;border-radius:4px;font-size:12px;font-family:inherit;cursor:pointer;";
+    // デフォルトの未選択項目
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- サンプルを選択 --";
+    select.appendChild(defaultOpt);
+    // 各サンプルを選択肢として追加
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = EXAMPLES[i]!.name;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", () => {
+      const idx = Number(select.value);
+      if (!Number.isNaN(idx) && EXAMPLES[idx] !== undefined) {
+        this.executeExample(EXAMPLES[idx]);
+      }
+      // 選択状態をリセットして再度同じサンプルを選べるようにする
+      select.value = "";
+    });
+    header.appendChild(select);
+
     container.appendChild(header);
 
     // ターミナル本体
@@ -206,6 +267,33 @@ export class OsApp {
           this.termDiv.appendChild(br);
         }
       }
+    }
+    this.scrollToBottom();
+  }
+
+  /** サンプルのコマンドを順次実行する */
+  private executeExample(example: Example): void {
+    for (const cmd of example.commands) {
+      // 入力欄にコマンドを表示してから実行する
+      if (this.currentInputSpan !== null) {
+        this.currentInputSpan.textContent = cmd;
+      }
+      // カーソルを消す
+      this.currentCursor?.remove();
+      this.currentCursor = null;
+      // 改行を追加
+      this.termDiv.appendChild(document.createElement("br"));
+      // コマンド入力状態をリセット
+      this.inputLine = "";
+      this.currentInputSpan = null;
+      this.currentPromptLine = null;
+      // コマンドを履歴に追加
+      this.history.push(cmd);
+      this.historyIndex = this.history.length;
+      // シェルでコマンドを実行
+      this.shell.execute(cmd);
+      // 次のプロンプトを表示
+      this.showPrompt();
     }
     this.scrollToBottom();
   }

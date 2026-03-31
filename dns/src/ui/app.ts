@@ -10,6 +10,22 @@ import { DnsCache } from "../resolver/cache.js";
 import { RecordType, recordTypeToString } from "../protocol/types.js";
 import type { ResolveTrace, NetworkEvent } from "../protocol/types.js";
 
+/** プリセット例の型定義 */
+interface Example {
+  name: string;
+  domain: string;
+  recordType: number;
+}
+
+/** よく使うクエリのプリセット一覧 */
+export const EXAMPLES: Example[] = [
+  { name: "基本: A レコード", domain: "www.example.com", recordType: RecordType.A },
+  { name: "メールサーバ (MX)", domain: "example.com", recordType: RecordType.MX },
+  { name: "ネームサーバ (NS)", domain: "example.com", recordType: RecordType.NS },
+  { name: "CNAME エイリアス", domain: "blog.example.com", recordType: RecordType.CNAME },
+  { name: "TXT レコード", domain: "example.com", recordType: RecordType.TXT },
+];
+
 export class DnsApp {
   private resolver!: DnsResolver;
   private cache!: DnsCache;
@@ -30,6 +46,35 @@ export class DnsApp {
     desc.style.cssText = "color:#6b7280;font-size:14px;margin:0 0 16px 0;";
     desc.textContent = "ドメイン名を入力すると、ルートサーバから権威サーバまでの再帰解決の過程を表示します。";
     container.appendChild(desc);
+
+    // プリセット例ドロップダウン
+    const exampleRow = document.createElement("div");
+    exampleRow.style.cssText = "display:flex;gap:8px;margin-bottom:8px;align-items:center;";
+
+    const exampleLabel = document.createElement("label");
+    exampleLabel.textContent = "例:";
+    exampleLabel.style.cssText = "font-size:14px;color:#374151;font-weight:500;";
+
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;flex:1;";
+
+    // 未選択のデフォルトオプション
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "— プリセットを選択 —";
+    exampleSelect.appendChild(defaultOpt);
+
+    // プリセット例のオプションを追加
+    for (const ex of EXAMPLES) {
+      const opt = document.createElement("option");
+      opt.value = ex.name;
+      opt.textContent = ex.name;
+      exampleSelect.appendChild(opt);
+    }
+
+    exampleRow.appendChild(exampleLabel);
+    exampleRow.appendChild(exampleSelect);
+    container.appendChild(exampleRow);
 
     // 入力エリア
     const inputRow = document.createElement("div");
@@ -115,6 +160,15 @@ export class DnsApp {
     clearCacheBtn.addEventListener("click", () => {
       this.cache.clear();
       this.updateCacheView();
+    });
+
+    // プリセット例選択時にドメインとレコード型を反映
+    exampleSelect.addEventListener("change", () => {
+      const selected = EXAMPLES.find((ex) => ex.name === exampleSelect.value);
+      if (selected) {
+        input.value = selected.domain;
+        typeSelect.value = String(selected.recordType);
+      }
     });
 
     this.updateCacheView();

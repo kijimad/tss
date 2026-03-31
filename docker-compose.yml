@@ -182,3 +182,78 @@ services:
     <<: *app
     volumes: [./xwm:/app]
     ports: ["5534:5173"]
+
+  nestjs:
+    <<: *app
+    volumes: [./nestjs:/app]
+    ports: ["5535:5173"]
+
+  modules:
+    <<: *app
+    volumes: [./modules:/app]
+    ports: ["5536:5173"]
+
+  estarget:
+    <<: *app
+    volumes: [./estarget:/app]
+    ports: ["5537:5173"]
+
+  connpool:
+    <<: *app
+    volumes: [./connpool:/app]
+    ports: ["5538:5173"]
+
+  syscall:
+    <<: *app
+    volumes: [./syscall:/app]
+    ports: ["5539:5173"]
+
+  tstype:
+    <<: *app
+    volumes: [./tstype:/app]
+    ports: ["5540:5173"]
+
+  secgroup:
+    <<: *app
+    volumes: [./secgroup:/app]
+    ports: ["5541:5173"]
+
+  dnsfilter:
+    <<: *app
+    volumes: [./dnsfilter:/app]
+    ports: ["5542:5173"]
+
+  isdb:
+    <<: *app
+    volumes: [./isdb:/app]
+    ports: ["5543:5173"]
+
+  train:
+    <<: *app
+    volumes: [./train:/app]
+    ports: ["5544:5173"]
+
+  dbindex:
+    <<: *app
+    volumes: [./dbindex:/app]
+    ports: ["5545:5173"]
+
+  lambda:
+    <<: *app
+    volumes: [./lambda:/app]
+    ports: ["5546:5173"]
+
+  k8s:
+    <<: *app
+    volumes: [./k8s:/app]
+    ports: ["5547:5173"]
+
+  awsnet:
+    <<: *app
+    volumes: [./awsnet:/app]
+    ports: ["5548:5173"]
+
+  iam:
+    <<: *app
+    volumes: [./iam:/app]
+    ports: ["5549:5173"]

@@ -9,6 +9,26 @@ import { simulatePacket } from "../net/simulator.js";
 import type { NetworkGraph } from "../net/graph.js";
 import type { Router, HopEvent } from "../net/types.js";
 
+// プリセット例の型
+interface Example {
+  /** 表示名 */
+  name: string;
+  /** 送信元ルータID */
+  source: string;
+  /** 宛先ルータID */
+  destination: string;
+  /** アニメーション速度(ms) */
+  speed: number;
+}
+
+// プリセット例一覧
+const EXAMPLES: readonly Example[] = [
+  { name: "同一AS内ルーティング", source: "R1", destination: "R4", speed: 500 },
+  { name: "AS間ルーティング", source: "R1", destination: "R6", speed: 600 },
+  { name: "最長経路", source: "R3", destination: "R10", speed: 700 },
+  { name: "隣接ルータ", source: "R1", destination: "R2", speed: 300 },
+] as const;
+
 // ASごとの色
 const AS_COLORS: Record<string, { bg: string; border: string; text: string } | undefined> = {
   AS100: { bg: "#1e3a5f", border: "#3b82f6", text: "#93c5fd" },
@@ -37,6 +57,22 @@ export class RoutingApp {
     title.style.cssText = "margin:0;font-size:16px;color:#f8fafc;";
     header.appendChild(title);
 
+    // プリセット例のドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:13px;";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "-- 例を選択 --";
+    exampleSelect.appendChild(defaultOpt);
+    for (const ex of EXAMPLES) {
+      const opt = document.createElement("option");
+      opt.value = ex.name;
+      opt.textContent = ex.name;
+      exampleSelect.appendChild(opt);
+    }
+    header.appendChild(this.label("Examples:"));
+    header.appendChild(exampleSelect);
+
     const srcSelect = document.createElement("select");
     srcSelect.style.cssText = "padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:13px;";
     header.appendChild(this.label("From:"));
@@ -61,6 +97,16 @@ export class RoutingApp {
     speedSlider.addEventListener("input", () => { this.speedMs = Number(speedSlider.value); });
     speedLabel.appendChild(speedSlider);
     header.appendChild(speedLabel);
+
+    // プリセット例選択時にソース・宛先・速度を反映
+    exampleSelect.addEventListener("change", () => {
+      const selected = EXAMPLES.find(e => e.name === exampleSelect.value);
+      if (selected === undefined) return;
+      srcSelect.value = selected.source;
+      dstSelect.value = selected.destination;
+      speedSlider.value = String(selected.speed);
+      this.speedMs = selected.speed;
+    });
 
     container.appendChild(header);
 

@@ -1,6 +1,156 @@
 import { VirtualFileSystem } from "../server/vfs.js";
 import { ViteDevServer, type ServerEvent } from "../server/dev-server.js";
 
+/** サンプルプロジェクトのプリセット定義 */
+export interface Example {
+  /** ドロップダウンに表示するラベル */
+  label: string;
+  /** プロジェクトのファイル群 */
+  files: Record<string, string>;
+}
+
+/** プリセットサンプル一覧 */
+export const EXAMPLES: Example[] = [
+  {
+    label: "Hello World",
+    files: {
+      "/index.html": `<!DOCTYPE html>
+<html>
+<head><title>Hello World</title></head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>`,
+      "/src/main.ts": `const el = document.getElementById("app");
+if (el) {
+  el.textContent = "Hello, World!";
+}`,
+    },
+  },
+  {
+    label: "CSS インポート",
+    files: {
+      "/index.html": `<!DOCTYPE html>
+<html>
+<head><title>CSS Import</title></head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>`,
+      "/src/main.ts": `import './style.css';
+
+const el = document.getElementById("app");
+if (el) {
+  el.innerHTML = '<h1 class="title">CSS インポートの例</h1>';
+}`,
+      "/src/style.css": `body {
+  margin: 0;
+  background: #1a1a2e;
+  color: #e2e8f0;
+}
+
+.title {
+  color: #bd34fe;
+  font-family: system-ui, sans-serif;
+  text-align: center;
+  padding: 2rem;
+}`,
+    },
+  },
+  {
+    label: "HMR 更新",
+    files: {
+      "/index.html": `<!DOCTYPE html>
+<html>
+<head><title>HMR Demo</title></head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>`,
+      "/src/main.ts": `import { render } from './render.ts';
+
+render();
+
+// HMR を受け入れる
+if (import.meta.hot) {
+  import.meta.hot.accept('./render.ts', () => {
+    render();
+  });
+}`,
+      "/src/render.ts": `export function render(): void {
+  const el = document.getElementById("app");
+  if (el) {
+    el.innerHTML = "<h1>HMR デモ</h1><p>このファイルを編集して保存すると HMR が発火します</p>";
+  }
+}`,
+    },
+  },
+  {
+    label: "JSX トランスフォーム",
+    files: {
+      "/index.html": `<!DOCTYPE html>
+<html>
+<head><title>JSX Transform</title></head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>`,
+      "/src/main.tsx": `function App() {
+  return (
+    <div>
+      <h1>JSX トランスフォーム</h1>
+      <p>TSX ファイルが JavaScript に変換されます</p>
+      <Counter initial={0} />
+    </div>
+  );
+}
+
+function Counter({ initial }: { initial: number }) {
+  return <button>Count: {initial}</button>;
+}
+
+const root = document.getElementById("root");
+if (root) {
+  root.innerHTML = "<p>JSX はビルド時に変換されます</p>";
+}`,
+    },
+  },
+  {
+    label: "環境変数",
+    files: {
+      "/index.html": `<!DOCTYPE html>
+<html>
+<head><title>Env Variables</title></head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>`,
+      "/src/main.ts": `// Vite は import.meta.env で環境変数を公開する
+const mode = import.meta.env.MODE;
+const baseUrl = import.meta.env.BASE_URL;
+const isDev = import.meta.env.DEV;
+
+const el = document.getElementById("app");
+if (el) {
+  el.innerHTML = \`
+    <h1>環境変数</h1>
+    <ul>
+      <li>MODE: \${mode}</li>
+      <li>BASE_URL: \${baseUrl}</li>
+      <li>DEV: \${isDev}</li>
+      <li>VITE_APP_TITLE: \${import.meta.env.VITE_APP_TITLE ?? "(未設定)"}</li>
+    </ul>
+  \`;
+}`,
+    },
+  },
+];
+
 const SAMPLE_PROJECT: Record<string, string> = {
   "/index.html": `<!DOCTYPE html>
 <html>
@@ -71,6 +221,26 @@ export class ViteApp {
     indicator.style.cssText = "font-size:11px;color:#41d1ff;background:#1a1a2e;padding:2px 8px;border-radius:4px;";
     indicator.textContent = "localhost:5173";
     header.appendChild(indicator);
+
+    // サンプルプリセット選択ドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "margin-left:auto;padding:3px 8px;font-size:12px;background:#2e2e32;color:#e2e8f0;border:1px solid #444;border-radius:4px;cursor:pointer;";
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "サンプルを選択…";
+    defaultOpt.disabled = true;
+    defaultOpt.selected = true;
+    exampleSelect.appendChild(defaultOpt);
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const example = EXAMPLES[i];
+      if (!example) continue;
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = example.label;
+      exampleSelect.appendChild(opt);
+    }
+    header.appendChild(exampleSelect);
+
     container.appendChild(header);
 
     const main = document.createElement("div");
@@ -195,6 +365,41 @@ export class ViteApp {
 
     // 初回リクエスト
     reqBtn.click();
+
+    // サンプル切り替え時にプロジェクトファイルを差し替える
+    exampleSelect.addEventListener("change", () => {
+      const idx = Number(exampleSelect.value);
+      const example = EXAMPLES[idx];
+      if (!example) return;
+
+      // 既存ファイルをすべて削除
+      for (const f of this.vfs.listFiles()) {
+        this.vfs.deleteFile(f.path);
+      }
+
+      // 選択されたサンプルのファイルを書き込む
+      for (const [path, content] of Object.entries(example.files)) {
+        this.vfs.writeFile(path, content);
+      }
+
+      // サーバーを再作成して起動
+      this.server = new ViteDevServer(this.vfs);
+      this.server.onEvent = (e) => addLog(logDiv, e);
+      this.server.start();
+
+      // 最初のファイルを選択してエディタに表示
+      const firstFile = this.vfs.listFiles()[0];
+      currentFile = firstFile?.path ?? "/index.html";
+      editorArea.value = this.vfs.readFile(currentFile) ?? "";
+      editorLabel.textContent = `Editor: ${currentFile}`;
+
+      // ログとパネルをクリアして再描画
+      logDiv.innerHTML = "";
+      resDiv.textContent = "";
+      stepsDiv.innerHTML = "";
+      renderTree();
+      reqBtn.click();
+    });
   }
 }
 

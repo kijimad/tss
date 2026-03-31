@@ -26,6 +26,20 @@ interface LayerDef {
   types: string[];
 }
 
+// プリセット例の定義
+interface Example {
+  name: string;
+  url: string;
+  speed: number;
+}
+
+const EXAMPLES: Example[] = [
+  { name: "GET リクエスト",     url: "http://93.184.216.34/index.html", speed: 300 },
+  { name: "API エンドポイント", url: "http://93.184.216.34/api/users",  speed: 300 },
+  { name: "404 Not Found",      url: "http://93.184.216.34/not-found",  speed: 300 },
+  { name: "大きなレスポンス",   url: "http://93.184.216.34/large-file", speed: 500 },
+];
+
 const LAYERS: LayerDef[] = [
   { name: "L7 HTTP",     color: "#ec4899", bgColor: "#4a0930", types: ["http_request", "http_response"] },
   { name: "L4 TCP",      color: "#10b981", bgColor: "#022c22", types: ["tcp_send", "tcp_recv", "tcp_state_change"] },
@@ -77,6 +91,23 @@ export class NetApp {
     title.textContent = "TCP/IP + HTTP 通信シミュレータ";
     title.style.cssText = "margin:0;font-size:16px;color:#f8fafc;";
     header.appendChild(title);
+
+    // プリセット例の選択ドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "padding:5px 10px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#f8fafc;font-size:13px;cursor:pointer;";
+    // デフォルト選択肢
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- 例を選択 --";
+    exampleSelect.appendChild(defaultOption);
+    // 各プリセット例をオプションとして追加
+    for (const example of EXAMPLES) {
+      const option = document.createElement("option");
+      option.value = example.name;
+      option.textContent = example.name;
+      exampleSelect.appendChild(option);
+    }
+    header.appendChild(exampleSelect);
 
     const input = document.createElement("input");
     input.type = "text";
@@ -187,6 +218,15 @@ export class NetApp {
           this.run(url);
         }
       }
+    });
+
+    // プリセット例の選択時に URL と速度スライダーを更新
+    exampleSelect.addEventListener("change", () => {
+      const selected = EXAMPLES.find(ex => ex.name === exampleSelect.value);
+      if (selected === undefined) return;
+      input.value = selected.url;
+      speedSlider.value = String(selected.speed);
+      this.speedMs = selected.speed;
     });
   }
 

@@ -121,6 +121,218 @@ const SAMPLE_FILES: { path: string; code: string }[] = [
 });` },
 ];
 
+// サンプルコード例（セレクトボックスからプリセットを選択可能）
+export const EXAMPLES: { label: string; files: { path: string; code: string }[] }[] = [
+  {
+    label: "基本的なテスト",
+    files: [
+      { path: "basic.test.js", code: `describe("基本的なテスト", function() {
+  it("数値の等値チェック", function() {
+    expect(1 + 1).toBe(2);
+    expect(100 - 1).toBe(99);
+  });
+
+  it("文字列の等値チェック", function() {
+    expect("hello").toBe("hello");
+    expect("hello").not.toBe("world");
+  });
+
+  it("真偽値のチェック", function() {
+    expect(true).toBeTruthy();
+    expect(false).toBeFalsy();
+    expect(null).toBeNull();
+    expect(undefined).toBeUndefined();
+  });
+
+  it("数値比較", function() {
+    expect(10).toBeGreaterThan(5);
+    expect(3).toBeLessThanOrEqual(3);
+    expect(0.1 + 0.2).toBeCloseTo(0.3, 5);
+  });
+});` },
+    ],
+  },
+  {
+    label: "非同期テスト",
+    files: [
+      { path: "async.test.js", code: `describe("非同期テスト (シミュレーション)", function() {
+  it("Promise 風の値を解決する", function() {
+    // シミュレータは同期実行のため、非同期の概念をコールバックで模倣する
+    var result = null;
+    var resolve = function(value) { result = value; };
+    resolve(42);
+    expect(result).toBe(42);
+  });
+
+  it("遅延コールバックのテスト", function() {
+    var data = [];
+    var fetchData = function(callback) {
+      callback(["apple", "banana", "cherry"]);
+    };
+    fetchData(function(items) { data = items; });
+    expect(data).toHaveLength(3);
+    expect(data).toContain("banana");
+  });
+
+  it("エラーハンドリング", function() {
+    var error = null;
+    var failingOperation = function(onError) {
+      onError(new Error("ネットワークエラー"));
+    };
+    failingOperation(function(e) { error = e; });
+    expect(error).toBeDefined();
+    expect(error.message).toBe("ネットワークエラー");
+  });
+});` },
+    ],
+  },
+  {
+    label: "モック",
+    files: [
+      { path: "mock.test.js", code: `describe("モック (手動実装)", function() {
+  it("関数の呼び出しを記録する", function() {
+    // vi.fn() の代わりに手動でモック関数を作成
+    var calls = [];
+    var mockFn = function() {
+      calls.push(Array.prototype.slice.call(arguments));
+    };
+
+    mockFn("hello");
+    mockFn(1, 2);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toEqual(["hello"]);
+    expect(calls[1]).toEqual([1, 2]);
+  });
+
+  it("戻り値を制御する", function() {
+    var returnValue = 0;
+    var mockFn = function() { return returnValue; };
+
+    expect(mockFn()).toBe(0);
+    returnValue = 42;
+    expect(mockFn()).toBe(42);
+  });
+
+  it("依存関数を差し替える", function() {
+    var logger = { logs: [] };
+    logger.log = function(msg) { logger.logs.push(msg); };
+
+    var greet = function(name) {
+      logger.log("Hello, " + name + "!");
+    };
+
+    greet("Alice");
+    greet("Bob");
+    expect(logger.logs).toHaveLength(2);
+    expect(logger.logs[0]).toBe("Hello, Alice!");
+    expect(logger.logs[1]).toBe("Hello, Bob!");
+  });
+});` },
+    ],
+  },
+  {
+    label: "describe ネスト",
+    files: [
+      { path: "nested.test.js", code: `describe("ユーザー管理", function() {
+  describe("作成", function() {
+    it("名前を設定できる", function() {
+      var user = { name: "太郎", age: 25 };
+      expect(user.name).toBe("太郎");
+    });
+
+    it("年齢を設定できる", function() {
+      var user = { name: "太郎", age: 25 };
+      expect(user.age).toBe(25);
+    });
+  });
+
+  describe("検証", function() {
+    it("名前が空でないこと", function() {
+      var name = "花子";
+      expect(name).toBeTruthy();
+      expect(name).not.toBe("");
+    });
+
+    it("年齢が正の整数であること", function() {
+      var age = 30;
+      expect(age).toBeGreaterThan(0);
+    });
+
+    describe("メールアドレス", function() {
+      it("@を含むこと", function() {
+        var email = "taro@example.com";
+        expect(email).toContain("@");
+      });
+
+      it("ドメインを含むこと", function() {
+        var email = "taro@example.com";
+        expect(email).toMatch(/\\w+@\\w+\\.\\w+/);
+      });
+    });
+  });
+
+  describe("比較", function() {
+    it("同じプロパティなら等しい", function() {
+      var a = { name: "太郎", age: 25 };
+      var b = { name: "太郎", age: 25 };
+      expect(a).toEqual(b);
+    });
+
+    it("異なるプロパティなら等しくない", function() {
+      var a = { name: "太郎" };
+      var b = { name: "花子" };
+      expect(a).not.toEqual(b);
+    });
+  });
+});` },
+    ],
+  },
+  {
+    label: "スナップショット",
+    files: [
+      { path: "snapshot.test.js", code: `describe("スナップショット風テスト", function() {
+  // シミュレータには toMatchSnapshot がないため、
+  // toEqual で期待値を固定する方式でスナップショットを模倣する
+
+  it("ユーザーオブジェクトのスナップショット", function() {
+    var user = { id: 1, name: "太郎", role: "admin" };
+    // スナップショット相当: 期待される構造を固定
+    expect(user).toEqual({
+      id: 1,
+      name: "太郎",
+      role: "admin"
+    });
+  });
+
+  it("配列のスナップショット", function() {
+    var items = ["りんご", "みかん", "ぶどう"];
+    expect(items).toEqual(["りんご", "みかん", "ぶどう"]);
+    expect(items).toHaveLength(3);
+  });
+
+  it("ネストされた構造のスナップショット", function() {
+    var config = {
+      theme: "dark",
+      lang: "ja",
+      features: { sidebar: true, notifications: false }
+    };
+    expect(config).toEqual({
+      theme: "dark",
+      lang: "ja",
+      features: { sidebar: true, notifications: false }
+    });
+  });
+
+  it("変更検出: 値が変わったら失敗する", function() {
+    var version = "1.0.0";
+    // バージョンが変わったらこのテストが失敗する（スナップショットの更新が必要）
+    expect(version).toBe("1.0.0");
+  });
+});` },
+    ],
+  },
+];
+
 export class VitestApp {
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:system-ui;background:#1b1b1f;color:#e2e8f0;";
@@ -135,6 +347,22 @@ export class VitestApp {
     runBtn.textContent = "Run All Tests";
     runBtn.style.cssText = "padding:4px 16px;background:#fcc72b;color:#1b1b1f;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;";
     header.appendChild(runBtn);
+
+    // サンプル選択ドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "padding:4px 8px;background:#2e2e32;color:#e2e8f0;border:1px solid #3e3e42;border-radius:4px;font-size:12px;cursor:pointer;";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- サンプルを選択 --";
+    exampleSelect.appendChild(defaultOption);
+    for (const example of EXAMPLES) {
+      const option = document.createElement("option");
+      option.value = example.label;
+      option.textContent = example.label;
+      exampleSelect.appendChild(option);
+    }
+    header.appendChild(exampleSelect);
+
     const statsSpan = document.createElement("span");
     statsSpan.style.cssText = "font-size:12px;color:#94a3b8;margin-left:auto;font-family:monospace;";
     header.appendChild(statsSpan);
@@ -189,6 +417,20 @@ export class VitestApp {
     renderFileList();
     editorArea.value = files[0]?.code ?? "";
     editorArea.addEventListener("input", () => { const f = files[currentFileIdx]; if (f !== undefined) f.code = editorArea.value; });
+
+    // サンプル選択時にエディタの内容を差し替える
+    exampleSelect.addEventListener("change", () => {
+      const selected = EXAMPLES.find(e => e.label === exampleSelect.value);
+      if (selected === undefined) return;
+      files.length = 0;
+      for (const f of selected.files) {
+        files.push({ ...f });
+      }
+      currentFileIdx = 0;
+      editorArea.value = files[0]?.code ?? "";
+      renderFileList();
+      runBtn.click();
+    });
 
     // 実行
     runBtn.addEventListener("click", () => {

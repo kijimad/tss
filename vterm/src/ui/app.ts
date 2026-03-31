@@ -7,6 +7,43 @@ const ROWS = 24;
 const CELL_W = 8.4;
 const CELL_H = 18;
 
+/** ターミナルに送信するサンプル入力の定義 */
+interface TerminalExample {
+  /** 表示名 */
+  name: string;
+  /** 送信する入力文字列の配列（順番に送信される） */
+  inputs: string[];
+}
+
+/** デモ用のサンプル入力一覧 */
+export const EXAMPLES: TerminalExample[] = [
+  {
+    name: "基本入力",
+    inputs: [
+      "ls -la\r",
+      "echo Hello, World!\r",
+    ],
+  },
+  {
+    name: "ANSIカラー",
+    inputs: [
+      "echo \x1b[31m赤色\x1b[0m \x1b[32m緑色\x1b[0m \x1b[34m青色\x1b[0m \x1b[1;33m太字黄色\x1b[0m\r",
+    ],
+  },
+  {
+    name: "カーソル移動",
+    inputs: [
+      "echo \x1b[5;10HHERE \x1b[1;1HTOP-LEFT \x1b[10;30HMIDDLE\r",
+    ],
+  },
+  {
+    name: "画面クリア",
+    inputs: [
+      "echo \x1b[2J\x1b[H画面をクリアしました\r",
+    ],
+  },
+];
+
 export class VtermApp {
   private pty!: PseudoTerminal;
   private screen!: TerminalScreen;
@@ -24,6 +61,31 @@ export class VtermApp {
     for (const c of ["#ff5f56", "#ffbd2e", "#27c93f"]) { const d = document.createElement("div"); d.style.cssText = `width:12px;height:12px;border-radius:50%;background:${c};`; dots.appendChild(d); }
     header.appendChild(dots);
     const t = document.createElement("span"); t.textContent = `vterm  ${String(COLS)}x${String(ROWS)}`; t.style.cssText = "color:#888;font-size:12px;"; header.appendChild(t);
+
+    // サンプル入力を選択するドロップダウン
+    const exampleSelect = document.createElement("select");
+    exampleSelect.style.cssText = "margin-left:auto;padding:2px 8px;font-size:12px;background:#2a2a3e;color:#e0e0e0;border:1px solid #555;border-radius:4px;cursor:pointer;";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- サンプル選択 --";
+    exampleSelect.appendChild(defaultOption);
+    for (let i = 0; i < EXAMPLES.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = EXAMPLES[i]!.name;
+      exampleSelect.appendChild(opt);
+    }
+    exampleSelect.addEventListener("change", () => {
+      const idx = parseInt(exampleSelect.value, 10);
+      if (!isNaN(idx) && idx >= 0 && idx < EXAMPLES.length) {
+        this.sendExample(EXAMPLES[idx]!);
+      }
+      // 選択をリセットして再度同じサンプルを選べるようにする
+      exampleSelect.value = "";
+      this.canvas.focus();
+    });
+    header.appendChild(exampleSelect);
+
     container.appendChild(header);
 
     const main = document.createElement("div");
@@ -183,6 +245,13 @@ export class VtermApp {
     }
     this.ptyLogDiv.appendChild(row);
     this.ptyLogDiv.scrollTop = this.ptyLogDiv.scrollHeight;
+  }
+
+  /** サンプル入力をターミナルに順番に送信する */
+  private sendExample(example: TerminalExample): void {
+    for (const input of example.inputs) {
+      this.pty.masterWrite(input);
+    }
   }
 
   private addEscLog(sequence: string, description: string): void {

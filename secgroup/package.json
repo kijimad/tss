@@ -1,0 +1,17 @@
+{
+  "name": "secgroup-sim",
+  "version": "1.0.0",
+  "description": "Security group / firewall rule simulator — packet filtering visualization",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2",
+    "vitest": "^4.1.1"
+  }
+}
