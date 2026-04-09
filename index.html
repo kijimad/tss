@@ -26,7 +26,7 @@
 <body>
   <header>
     <h1>Transer Simulators</h1>
-    <p>49 projects &mdash; TypeScript + Vite + Vitest</p>
+    <p>76 projects &mdash; TypeScript + Vite + Vitest</p>
   </header>
   <main>
     <h2>Infra / Network</h2>
@@ -37,8 +37,21 @@
       <a class="card" href="http://localhost:5525"><div class="name">ssh</div><div class="desc">SSH プロトコル — DH鍵交換、暗号化チャネル</div><div class="port">:5525</div></a>
       <a class="card" href="http://localhost:5524"><div class="name">smtp</div><div class="desc">メール送信 — SMTP セッション、DNS MX</div><div class="port">:5524</div></a>
       <a class="card" href="http://localhost:5517"><div class="name">pki</div><div class="desc">公開鍵認証 — RSA、証明書チェーン、TLS</div><div class="port">:5517</div></a>
+      <a class="card" href="http://localhost:5573"><div class="name">token-auth</div><div class="desc">トークン認証 — JWT生成/検証、OAuth2、改ざん検出</div><div class="port">:5573</div></a>
+      <a class="card" href="http://localhost:5575"><div class="name">signing</div><div class="desc">公開鍵署名 — RSA鍵生成、暗号化/復号、デジタル署名、改ざん検出</div><div class="port">:5575</div></a>
       <a class="card" href="http://localhost:5541"><div class="name">secgroup</div><div class="desc">セキュリティグループ — パケットフィルタ、ステートフル FW</div><div class="port">:5541</div></a>
       <a class="card" href="http://localhost:5542"><div class="name">dnsfilter</div><div class="desc">DNS フィルタ — ブロックリスト、カテゴリ、Pi-hole 風</div><div class="port">:5542</div></a>
+      <a class="card" href="http://localhost:5554"><div class="name">https</div><div class="desc">HTTPS / TLS — ハンドシェイク、鍵交換、レコード暗号化</div><div class="port">:5554</div></a>
+      <a class="card" href="http://localhost:5555"><div class="name">dhcp</div><div class="desc">DHCP — DORA、リース管理、リレー、プール枯渇</div><div class="port">:5555</div></a>
+      <a class="card" href="http://localhost:5556"><div class="name">nmap</div><div class="desc">Nmap — ポートスキャン、OS検出、サービス検出、FW回避</div><div class="port">:5556</div></a>
+      <a class="card" href="http://localhost:5557"><div class="name">ping</div><div class="desc">Ping — ICMP Echo、RTT、TTL、traceroute、MTU探索</div><div class="port">:5557</div></a>
+      <a class="card" href="http://localhost:5559"><div class="name">icmp</div><div class="desc">ICMP — 全メッセージタイプ、エラー報告、Redirect、PMTUD</div><div class="port">:5559</div></a>
+      <a class="card" href="http://localhost:5562"><div class="name">netdev</div><div class="desc">ネットワーク機器 — L2スイッチ、ルーター、FW、NAT、AP、LB</div><div class="port">:5562</div></a>
+      <a class="card" href="http://localhost:5563"><div class="name">arp</div><div class="desc">ARP — Request/Reply、キャッシュ、Gratuitous、Proxy、スプーフィング</div><div class="port">:5563</div></a>
+      <a class="card" href="http://localhost:5564"><div class="name">conncost</div><div class="desc">接続コスト — TCP/TLS/QUIC HS、0-RTT、Keep-Alive比較</div><div class="port">:5564</div></a>
+      <a class="card" href="http://localhost:5553"><div class="name">igp</div><div class="desc">IGP ルーティング — OSPF (Dijkstra) vs RIP (Bellman-Ford)</div><div class="port">:5553</div></a>
+      <a class="card" href="http://localhost:5566"><div class="name">ethernet</div><div class="desc">Ethernet — フレーム構造、MAC学習、CSMA/CD、VLAN、STP</div><div class="port">:5566</div></a>
+      <a class="card" href="http://localhost:5567"><div class="name">wifi</div><div class="desc">Wi-Fi 802.11 — CSMA/CA、認証、VLAN、RTS/CTS、電波伝搬</div><div class="port">:5567</div></a>
     </div>
 
     <h2>OS / Low-level</h2>
@@ -50,10 +63,12 @@
       <a class="card" href="http://localhost:5523"><div class="name">shell</div><div class="desc">Unix シェル — パイプ、リダイレクト、30+コマンド</div><div class="port">:5523</div></a>
       <a class="card" href="http://localhost:5503"><div class="name">diskdrv</div><div class="desc">ディスクドライバ</div><div class="port">:5503</div></a>
       <a class="card" href="http://localhost:5529"><div class="name">usb</div><div class="desc">USBドライバ — エニュメレーション、転送</div><div class="port">:5529</div></a>
+      <a class="card" href="http://localhost:5558"><div class="name">bluetooth</div><div class="desc">Bluetooth — BLE GATT、ペアリング、アドバタイズ、PHY</div><div class="port">:5558</div></a>
       <a class="card" href="http://localhost:5534"><div class="name">xwm</div><div class="desc">X Window Manager — Xサーバ、装飾、フォーカス</div><div class="port">:5534</div></a>
       <a class="card" href="http://localhost:5510"><div class="name">gpu</div><div class="desc">GPU — CUDA、ワープ、レンダリングパイプライン</div><div class="port">:5510</div></a>
       <a class="card" href="http://localhost:5507"><div class="name">encoding</div><div class="desc">文字コード — UTF-8/16、Shift_JIS、文字化け</div><div class="port">:5507</div></a>
       <a class="card" href="http://localhost:5539"><div class="name">syscall</div><div class="desc">システムコール — fd/プロセス/メモリ、user↔kernel 遷移</div><div class="port">:5539</div></a>
+      <a class="card" href="http://localhost:5565"><div class="name">process</div><div class="desc">プロセス — fork/exec、シグナル、パイプ、zombie、スケジューラ</div><div class="port">:5565</div></a>
     </div>
 
     <h2>Database</h2>
@@ -62,6 +77,7 @@
       <a class="card" href="http://localhost:5518"><div class="name">prisma-sim</div><div class="desc">Prisma ORM — スキーマ、クエリエンジン、マイグレーション</div><div class="port">:5518</div></a>
       <a class="card" href="http://localhost:5538"><div class="name">connpool</div><div class="desc">コネクションプール — ライフサイクル、キュー、タイムアウト</div><div class="port">:5538</div></a>
       <a class="card" href="http://localhost:5545"><div class="name">dbindex</div><div class="desc">DB インデックス — B+Tree / Hash / Full Scan 比較</div><div class="port">:5545</div></a>
+      <a class="card" href="http://localhost:5560"><div class="name">dbconn</div><div class="desc">DB接続 — TCP/TLS/認証、プール管理、フェイルオーバー</div><div class="port">:5560</div></a>
     </div>
 
     <h2>Language / Compiler / Runtime</h2>
@@ -75,12 +91,15 @@
       <a class="card" href="http://localhost:5536"><div class="name">modules</div><div class="desc">モジュールシステム — CJS / ESM / AMD / UMD / SystemJS 比較</div><div class="port">:5536</div></a>
       <a class="card" href="http://localhost:5537"><div class="name">estarget</div><div class="desc">ES Target — ES3~ESNext ダウンレベル変換比較</div><div class="port">:5537</div></a>
       <a class="card" href="http://localhost:5540"><div class="name">tstype</div><div class="desc">TS 型システム — 型解決ステップ、ユーティリティ型、ツリー図示</div><div class="port">:5540</div></a>
+      <a class="card" href="http://localhost:5565"><div class="name">regex</div><div class="desc">正規表現エンジン — NFA 構築、ε-closure、マッチングトレース</div><div class="port">:5565</div></a>
+      <a class="card" href="http://localhost:5574"><div class="name">jsproto</div><div class="desc">JS プロトタイプ — [[Prototype]]チェーン、new、継承、シャドーイング</div><div class="port">:5574</div></a>
     </div>
 
     <h2>Frontend / Browser</h2>
     <div class="grid">
       <a class="card" href="http://localhost:5519"><div class="name">react-sim</div><div class="desc">React — VDOM差分、Fiber、Hooks</div><div class="port">:5519</div></a>
       <a class="card" href="http://localhost:5502"><div class="name">browser</div><div class="desc">ブラウザエンジン — HTML/CSSパーサ、レイアウト、描画</div><div class="port">:5502</div></a>
+      <a class="card" href="http://localhost:5552"><div class="name">fontrend</div><div class="desc">フォントレンダラー — ベジェ曲線、ラスタライズ、AA、ヒンティング</div><div class="port">:5552</div></a>
     </div>
 
     <h2>Dev Tools</h2>
@@ -90,6 +109,10 @@
       <a class="card" href="http://localhost:5531"><div class="name">vite-sim</div><div class="desc">Vite — ファイル変換、HMR、依存グラフ</div><div class="port">:5531</div></a>
       <a class="card" href="http://localhost:5532"><div class="name">vitest-sim</div><div class="desc">Vitest — マッチャー、テストランナー</div><div class="port">:5532</div></a>
       <a class="card" href="http://localhost:5505"><div class="name">docker</div><div class="desc">Docker — レイヤーFS、namespace、cgroup</div><div class="port">:5505</div></a>
+      <a class="card" href="http://localhost:5561"><div class="name">dnet</div><div class="desc">Docker Network — bridge、overlay、veth、iptables NAT</div><div class="port">:5561</div></a>
+      <a class="card" href="http://localhost:5550"><div class="name">nginx</div><div class="desc">Nginx — location マッチ、リバプロ、LB、静的配信</div><div class="port">:5550</div></a>
+      <a class="card" href="http://localhost:5551"><div class="name">apache</div><div class="desc">Apache — VirtualHost、mod_rewrite、.htaccess、CGI</div><div class="port">:5551</div></a>
+      <a class="card" href="http://localhost:5571"><div class="name">lsp</div><div class="desc">LSP — JSON-RPC、補完、診断、ホバー、定義ジャンプ、リネーム</div><div class="port">:5571</div></a>
     </div>
 
     <h2>Backend Framework</h2>
@@ -105,6 +128,10 @@
       <a class="card" href="http://localhost:5547"><div class="name">k8s</div><div class="desc">Kubernetes — Pod スケジューリング、ReplicaSet、Service</div><div class="port">:5547</div></a>
       <a class="card" href="http://localhost:5548"><div class="name">awsnet</div><div class="desc">AWS VPC — サブネット、IGW、NAT、NACL、ルートテーブル</div><div class="port">:5548</div></a>
       <a class="card" href="http://localhost:5549"><div class="name">iam</div><div class="desc">AWS IAM — ポリシー評価、Boundary、SCP、ロール</div><div class="port">:5549</div></a>
+      <a class="card" href="http://localhost:5553"><div class="name">elb</div><div class="desc">ELB — ロードバランシング、ヘルスチェック、トラフィック分散</div><div class="port">:5553</div></a>
+      <a class="card" href="http://localhost:5568"><div class="name">cloudfront</div><div class="desc">CloudFront — エッジキャッシュ、TTL、Lambda@Edge、無効化</div><div class="port">:5568</div></a>
+      <a class="card" href="http://localhost:5569"><div class="name">apigw</div><div class="desc">API Gateway — REST API、Lambda統合、認証、スロットル</div><div class="port">:5569</div></a>
+      <a class="card" href="http://localhost:5570"><div class="name">route53</div><div class="desc">Route 53 — ルーティング7種、ヘルスチェック、フェイルオーバー</div><div class="port">:5570</div></a>
     </div>
 
     <h2>Other</h2>
@@ -112,6 +139,7 @@
       <a class="card" href="http://localhost:5527"><div class="name">tss</div><div class="desc">タスクスケジューラ</div><div class="port">:5527</div></a>
       <a class="card" href="http://localhost:5543"><div class="name">isdb</div><div class="desc">地上デジタル放送 — ISDB-T、OFDM、TS パケット</div><div class="port">:5543</div></a>
       <a class="card" href="http://localhost:5544"><div class="name">train</div><div class="desc">鉄道車両 — 走行抵抗、勾配、信号、速度グラフ</div><div class="port">:5544</div></a>
+      <a class="card" href="http://localhost:5572"><div class="name">gbalink</div><div class="desc">GBA 通信 — SPI、Multi-Player、UART、リンクケーブル</div><div class="port">:5572</div></a>
     </div>
   </main>
 </body>

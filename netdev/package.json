@@ -1,0 +1,8 @@
+{
+  "name": "netdev-sim",
+  "version": "1.0.0",
+  "description": "Network device simulator — L2 switch, L3 router, firewall, load balancer, WAP, NAT gateway",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "test": "vitest run", "test:watch": "vitest" },
+  "devDependencies": { "typescript": "^6.0.2", "vite": "^8.0.2", "vitest": "^4.1.1" }
+}

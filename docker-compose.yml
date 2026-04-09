@@ -257,3 +257,143 @@ services:
     <<: *app
     volumes: [./iam:/app]
     ports: ["5549:5173"]
+
+  nginx:
+    <<: *app
+    volumes: [./nginx:/app]
+    ports: ["5550:5173"]
+
+  apache:
+    <<: *app
+    volumes: [./apache:/app]
+    ports: ["5551:5173"]
+
+  fontrend:
+    <<: *app
+    volumes: [./fontrend:/app]
+    ports: ["5552:5173"]
+
+  igp:
+    <<: *app
+    volumes: [./igp:/app]
+    ports: ["5553:5173"]
+
+  regex:
+    <<: *app
+    volumes: [./regex:/app]
+    ports: ["5565:5173"]
+
+  ethernet:
+    <<: *app
+    volumes: [./ethernet:/app]
+    ports: ["5566:5173"]
+
+  wifi:
+    <<: *app
+    volumes: [./wifi:/app]
+    ports: ["5567:5173"]
+
+  cloudfront:
+    <<: *app
+    volumes: [./cloudfront:/app]
+    ports: ["5568:5173"]
+
+  apigw:
+    <<: *app
+    volumes: [./apigw:/app]
+    ports: ["5569:5173"]
+
+  route53:
+    <<: *app
+    volumes: [./route53:/app]
+    ports: ["5570:5173"]
+
+  lsp:
+    <<: *app
+    volumes: [./lsp:/app]
+    ports: ["5571:5173"]
+
+  gbalink:
+    <<: *app
+    volumes: [./gbalink:/app]
+    ports: ["5572:5173"]
+
+  token-auth:
+    <<: *app
+    volumes: [./token-auth:/app]
+    ports: ["5573:5173"]
+
+  jsproto:
+    <<: *app
+    volumes: [./jsproto:/app]
+    ports: ["5574:5173"]
+
+  elb:
+    <<: *app
+    volumes: [./elb:/app]
+    ports: ["5553:5173"]
+
+  https:
+    <<: *app
+    volumes: [./https:/app]
+    ports: ["5554:5173"]
+
+  dhcp:
+    <<: *app
+    volumes: [./dhcp:/app]
+    ports: ["5555:5173"]
+
+  nmap:
+    <<: *app
+    volumes: [./nmap:/app]
+    ports: ["5556:5173"]
+
+  ping:
+    <<: *app
+    volumes: [./ping:/app]
+    ports: ["5557:5173"]
+
+  bluetooth:
+    <<: *app
+    volumes: [./bluetooth:/app]
+    ports: ["5558:5173"]
+
+  icmp:
+    <<: *app
+    volumes: [./icmp:/app]
+    ports: ["5559:5173"]
+
+  dbconn:
+    <<: *app
+    volumes: [./dbconn:/app]
+    ports: ["5560:5173"]
+
+  dnet:
+    <<: *app
+    volumes: [./dnet:/app]
+    ports: ["5561:5173"]
+
+  netdev:
+    <<: *app
+    volumes: [./netdev:/app]
+    ports: ["5562:5173"]
+
+  arp:
+    <<: *app
+    volumes: [./arp:/app]
+    ports: ["5563:5173"]
+
+  conncost:
+    <<: *app
+    volumes: [./conncost:/app]
+    ports: ["5564:5173"]
+
+  process:
+    <<: *app
+    volumes: [./process:/app]
+    ports: ["5565:5173"]
+
+  signing:
+    <<: *app
+    volumes: [./signing:/app]
+    ports: ["5575:5173"]

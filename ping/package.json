@@ -1,0 +1,8 @@
+{
+  "name": "ping-sim",
+  "version": "1.0.0",
+  "description": "Ping simulator — ICMP echo, RTT, TTL, traceroute, packet loss, fragmentation",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "test": "vitest run", "test:watch": "vitest" },
+  "devDependencies": { "typescript": "^6.0.2", "vite": "^8.0.2", "vitest": "^4.1.1" }
+}

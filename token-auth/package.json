@@ -1,0 +1,8 @@
+{
+  "name": "token-auth-sim",
+  "version": "1.0.0",
+  "description": "Token authentication simulator — JWT, OAuth2, session, API key, HMAC, refresh flow",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "test": "vitest run", "test:watch": "vitest" },
+  "devDependencies": { "typescript": "^6.0.2", "vite": "^8.0.2", "vitest": "^4.1.1" }
+}
