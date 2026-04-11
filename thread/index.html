@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UNIX Thread Simulator</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:"SF Mono","Fira Code",monospace;background:#0a0a0f;color:#c8ccd4;min-height:100vh}
+    .container{max-width:1000px;margin:0 auto;padding:24px}
+    h1{font-size:1.4rem;color:#e8eaed;margin-bottom:20px;border-bottom:1px solid #2a2d35;padding-bottom:12px}
+    h2{font-size:.9rem;color:#9ca3af;margin-bottom:8px}
+    .controls{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+    .controls label{font-size:.85rem;color:#9ca3af}
+    .controls select{flex:1;min-width:200px;padding:8px 12px;background:#1a1d27;color:#e8eaed;border:1px solid #2a2d35;border-radius:6px;font-family:inherit;font-size:.8rem}
+    .controls button{padding:8px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600}
+    .controls button:hover{background:#2563eb}
+    .step-nav{display:flex;gap:12px;align-items:center;margin-bottom:20px}
+    .step-nav button{padding:6px 16px;background:#1a1d27;color:#e8eaed;border:1px solid #2a2d35;border-radius:4px;cursor:pointer;font-family:inherit}
+    .step-nav button:hover:not(:disabled){background:#2a2d35}
+    .step-nav button:disabled{opacity:.3;cursor:default}
+    #step-info{font-size:.85rem;color:#9ca3af}
+    .tick-msg{padding:10px 14px;background:#12141c;border:1px solid #2a2d35;border-radius:8px;margin-bottom:16px}
+    .tick-msg .msg{font-size:.85rem;color:#e8eaed}
+    .tick-msg .warning{font-size:.8rem;color:#f87171;margin-top:4px;font-weight:600}
+    .tick-msg.warn{border-color:#ef4444;background:#1c1215}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+    .panel{background:#12141c;border:1px solid #2a2d35;border-radius:8px;padding:12px}
+    .empty{color:#6b7280;font-size:.8rem;padding:8px}
+    .thread-list{display:flex;flex-direction:column;gap:4px}
+    .thread-row{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:4px;font-size:.8rem;background:#1a1d27}
+    .thread-row.current{border-left:3px solid #3b82f6;background:#141828}
+    .tid{color:#60a5fa;font-weight:700;min-width:24px}
+    .tname{color:#e8eaed;min-width:80px}
+    .tstate{font-size:.7rem;padding:2px 6px;border-radius:3px}
+    .badge-created{background:#6366f1;color:#fff}
+    .badge-ready{background:#22c55e;color:#000}
+    .badge-running{background:#3b82f6;color:#fff}
+    .badge-blocked{background:#f59e0b;color:#000}
+    .badge-terminated{background:#6b7280;color:#fff}
+    .tcpu{color:#6b7280;font-size:.7rem;margin-left:auto}
+    .sync-item{display:flex;gap:8px;align-items:center;padding:5px 8px;font-size:.8rem;background:#1a1d27;border-radius:4px;margin-bottom:4px}
+    .sync-type{color:#a78bfa;font-weight:600;min-width:60px;font-size:.7rem}
+    .sync-id{color:#fbbf24;min-width:60px}
+    .sync-detail{color:#9ca3af;font-size:.75rem}
+    .var-list{display:flex;flex-direction:column;gap:4px}
+    .var-row{display:flex;gap:10px;align-items:center;padding:5px 8px;font-size:.8rem;background:#1a1d27;border-radius:4px}
+    .var-name{color:#fbbf24;font-weight:600;min-width:80px}
+    .var-val{color:#e8eaed;font-size:1rem;font-weight:700;min-width:40px}
+    .var-writer{color:#6b7280;font-size:.7rem}
+    .var-access{color:#6b7280;font-size:.7rem;margin-left:auto}
+    @media(max-width:700px){.grid2{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/ui/app.ts"></script>
+</body>
+</html>

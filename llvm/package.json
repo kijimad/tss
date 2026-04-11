@@ -1,0 +1,17 @@
+{
+  "name": "llvm-sim",
+  "version": "1.0.0",
+  "description": "LLVM — SSA/IR、最適化パス(定数畳み込み/DCE/mem2reg/InstCombine)、レジスタ割り当て、コード生成",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2",
+    "vitest": "^4.1.1"
+  }
+}

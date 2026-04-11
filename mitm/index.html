@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MITM Simulator</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:"SF Mono","Fira Code",monospace;background:#0a0a0f;color:#c8ccd4;min-height:100vh}
+    .container{max-width:960px;margin:0 auto;padding:24px}
+    h1{font-size:1.4rem;color:#e8eaed;margin-bottom:20px;border-bottom:1px solid #2a2d35;padding-bottom:12px}
+    .controls{display:flex;gap:12px;align-items:center;margin-bottom:24px;flex-wrap:wrap}
+    .controls label{font-size:.85rem;color:#9ca3af}
+    .controls select{flex:1;min-width:200px;padding:8px 12px;background:#1a1d27;color:#e8eaed;border:1px solid #2a2d35;border-radius:6px;font-family:inherit;font-size:.8rem}
+    .controls button{padding:8px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600}
+    .controls button:hover{background:#2563eb}
+    .result-card{background:#12141c;border:1px solid #2a2d35;border-radius:8px;margin-bottom:20px;overflow:hidden}
+    .card-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
+    .card-header h2{font-size:.95rem;color:#e8eaed}
+    .status-danger{background:#1c1215;border-bottom:2px solid #ef4444}
+    .status-safe{background:#111c15;border-bottom:2px solid #22c55e}
+    .badge{font-size:.75rem;padding:4px 10px;border-radius:12px;font-weight:600}
+    .badge.status-danger{background:#dc2626;color:#fff}
+    .badge.status-safe{background:#16a34a;color:#fff}
+    .card-body{padding:16px}
+    .status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+    .status-item{text-align:center;padding:10px;background:#1a1d27;border-radius:6px;border:1px solid #2a2d35}
+    .status-item.active{border-color:#ef4444;background:#1c1215}
+    .status-item .label{display:block;font-size:.7rem;color:#9ca3af;margin-bottom:4px}
+    .status-item .value{font-size:1.2rem;font-weight:700}
+    details{margin:8px 0}
+    summary{cursor:pointer;font-size:.85rem;color:#9ca3af;padding:6px 0}
+    summary:hover{color:#e8eaed}
+    .steps{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+    .step{display:flex;gap:10px;padding:8px 10px;border-radius:4px;font-size:.8rem;background:#1a1d27}
+    .step-success .step-icon{color:#22c55e}
+    .step-fail .step-icon{color:#ef4444}
+    .step-phase{color:#60a5fa;margin-right:4px}
+    .step-actor{color:#a78bfa;margin-right:4px}
+    .step-detail{color:#6b7280;font-size:.75rem;margin-top:4px;padding-left:4px;border-left:2px solid #2a2d35}
+    .data-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:.8rem}
+    .data-table th{text-align:left;padding:6px 10px;background:#1a1d27;color:#9ca3af;border-bottom:1px solid #2a2d35}
+    .data-table td{padding:6px 10px;border-bottom:1px solid #1a1d27}
+    .row-danger{background:#1c1215;color:#fca5a5}
+    .packets{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+    .packet{padding:10px;background:#1a1d27;border-radius:6px;border:1px solid #2a2d35;font-size:.8rem}
+    .packet-tampered{border-color:#ef4444;background:#1c1215}
+    .packet-header{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+    .proto-badge{padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:600;text-transform:uppercase}
+    .proto-http{background:#f59e0b;color:#000}
+    .proto-https{background:#22c55e;color:#000}
+    .proto-dns{background:#3b82f6;color:#fff}
+    .proto-arp{background:#a78bfa;color:#000}
+    .proto-tcp{background:#6b7280;color:#fff}
+    .badge-small{font-size:.65rem;padding:2px 6px;border-radius:3px}
+    .badge-enc{background:#16a34a;color:#fff}
+    .badge-plain{background:#dc2626;color:#fff}
+    .badge-tamper{background:#f59e0b;color:#000}
+    .packet-payload code{color:#9ca3af;word-break:break-all}
+    .packet-original{color:#6b7280;font-size:.75rem;margin-top:4px}
+    .blocked-list{margin:12px 0;padding:12px;background:#111c15;border:1px solid #22c55e;border-radius:6px}
+    .blocked-list h3{font-size:.85rem;color:#22c55e;margin-bottom:8px}
+    .blocked-list li{font-size:.8rem;margin-left:16px;color:#86efac}
+    .mitigations{margin:12px 0;padding:12px;background:#1c1a12;border:1px solid #f59e0b;border-radius:6px}
+    .mitigations h3{font-size:.85rem;color:#f59e0b;margin-bottom:8px}
+    .mitigations li{font-size:.8rem;margin-left:16px;color:#fde68a}
+    .event-log{margin-top:24px}
+    .events{display:flex;flex-direction:column;gap:4px;margin-top:8px;max-height:400px;overflow-y:auto}
+    .event{display:flex;gap:8px;padding:4px 8px;font-size:.75rem;border-radius:3px;background:#1a1d27}
+    .event-type{min-width:60px;color:#60a5fa;font-weight:600}
+    .event-actor{min-width:80px;color:#a78bfa}
+    .event-msg{color:#9ca3af}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/ui/app.ts"></script>
+</body>
+</html>

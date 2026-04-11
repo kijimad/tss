@@ -331,7 +331,7 @@ services:
   elb:
     <<: *app
     volumes: [./elb:/app]
-    ports: ["5553:5173"]
+    ports: ["5584:5173"]
 
   https:
     <<: *app
@@ -391,9 +391,210 @@ services:
   process:
     <<: *app
     volumes: [./process:/app]
-    ports: ["5565:5173"]
+    ports: ["5585:5173"]
 
   signing:
     <<: *app
     volumes: [./signing:/app]
     ports: ["5575:5173"]
+
+  linking:
+    <<: *app
+    volumes: [./linking:/app]
+    ports: ["5576:5173"]
+
+  asm:
+    <<: *app
+    volumes: [./asm:/app]
+    ports: ["5577:5173"]
+
+  arch:
+    <<: *app
+    volumes: [./arch:/app]
+    ports: ["5578:5173"]
+
+  memmgr:
+    <<: *app
+    volumes: [./memmgr:/app]
+    ports: ["5579:5173"]
+
+  objcc:
+    <<: *app
+    volumes: [./objcc:/app]
+    ports: ["5580:5173"]
+
+  hwint:
+    <<: *app
+    volumes: [./hwint:/app]
+    ports: ["5581:5173"]
+
+  sched:
+    <<: *app
+    volumes: [./sched:/app]
+    ports: ["5582:5173"]
+
+  netgear:
+    <<: *app
+    volumes: [./netgear:/app]
+    ports: ["5583:5173"]
+
+  vlan:
+    <<: *app
+    volumes: [./vlan:/app]
+    ports: ["5586:5173"]
+
+  ftp:
+    <<: *app
+    volumes: [./ftp:/app]
+    ports: ["5587:5173"]
+
+  iptunnel:
+    <<: *app
+    volumes: [./iptunnel:/app]
+    ports: ["5588:5173"]
+
+  vpc:
+    <<: *app
+    volumes: [./vpc:/app]
+    ports: ["5589:5173"]
+
+  igw:
+    <<: *app
+    volumes: [./igw:/app]
+    ports: ["5590:5173"]
+
+  natgw:
+    <<: *app
+    volumes: [./natgw:/app]
+    ports: ["5591:5173"]
+
+  gc:
+    <<: *app
+    volumes: [./gc:/app]
+    ports: ["5592:5173"]
+
+  mmu:
+    <<: *app
+    volumes: [./mmu:/app]
+    ports: ["5593:5173"]
+
+  cpuseg:
+    <<: *app
+    volumes: [./cpuseg:/app]
+    ports: ["5594:5173"]
+
+  tcphttp:
+    <<: *app
+    volumes: [./tcphttp:/app]
+    ports: ["5595:5173"]
+
+  udpmcast:
+    <<: *app
+    volumes: [./udpmcast:/app]
+    ports: ["5596:5173"]
+
+  unixsock:
+    <<: *app
+    volumes: [./unixsock:/app]
+    ports: ["5597:5173"]
+
+  signal:
+    <<: *app
+    volumes: [./signal:/app]
+    ports: ["5598:5173"]
+
+  goconc:
+    <<: *app
+    volumes: [./goconc:/app]
+    ports: ["5599:5173"]
+
+  execload:
+    <<: *app
+    volumes: [./execload:/app]
+    ports: ["5600:5173"]
+
+  debugger:
+    <<: *app
+    volumes: [./debugger:/app]
+    ports: ["5601:5173"]
+
+  iobuf:
+    <<: *app
+    volumes: [./iobuf:/app]
+    ports: ["5602:5173"]
+  procmgr:
+    <<: *app
+    volumes: [./procmgr:/app]
+    ports: ["5603:5173"]
+  yarv:
+    <<: *app
+    volumes: [./yarv:/app]
+    ports: ["5604:5173"]
+  llvm:
+    <<: *app
+    volumes: [./llvm:/app]
+    ports: ["5605:5173"]
+  rtproto:
+    <<: *app
+    volumes: [./rtproto:/app]
+    ports: ["5606:5173"]
+  quic:
+    <<: *app
+    volumes: [./quic:/app]
+    ports: ["5607:5173"]
+  cookie:
+    <<: *app
+    volumes: [./cookie:/app]
+    ports: ["5608:5173"]
+  cors:
+    <<: *app
+    volumes: [./cors:/app]
+    ports: ["5609:5173"]
+  rpc:
+    <<: *app
+    volumes: [./rpc:/app]
+    ports: ["5610:5173"]
+  qrcode:
+    <<: *app
+    volumes: [./qrcode:/app]
+    ports: ["5611:5173"]
+  hls:
+    <<: *app
+    volumes: [./hls:/app]
+    ports: ["5612:5173"]
+  xss:
+    <<: *app
+    volumes: [./xss:/app]
+    ports: ["5613:5173"]
+  mitm:
+    <<: *app
+    volumes: [./mitm:/app]
+    ports: ["5614:5173"]
+  sqli:
+    <<: *app
+    volumes: [./sqli:/app]
+    ports: ["5615:5173"]
+  stackheap:
+    <<: *app
+    volumes: [./stackheap:/app]
+    ports: ["5616:5173"]
+  thread:
+    <<: *app
+    volumes: [./thread:/app]
+    ports: ["5617:5173"]
+  semaphore:
+    <<: *app
+    volumes: [./semaphore:/app]
+    ports: ["5618:5173"]
+  termio:
+    <<: *app
+    volumes: [./termio:/app]
+    ports: ["5619:5173"]
+  pty:
+    <<: *app
+    volumes: [./pty:/app]
+    ports: ["5620:5173"]
+  netprint:
+    <<: *app
+    volumes: [./netprint:/app]
+    ports: ["5621:5173"]

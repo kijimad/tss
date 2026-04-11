@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UNIX セマフォ シミュレーター</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a1a; color: #e0e0e0; font-family: 'Menlo','Consolas',monospace; font-size: 13px; }
+    #app { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    h3 { font-size: 13px; color: #7dd3fc; margin-bottom: 8px; border-bottom: 1px solid #1e1e3e; padding-bottom: 4px; }
+    .controls { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .controls label { color: #aaa; font-size: 12px; }
+    select, button { background: #111128; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-family: inherit; font-size: 12px; }
+    select:hover, button:hover { border-color: #00d4ff; }
+    button:disabled { opacity: .4; cursor: default; }
+    input[type="range"] { width: 100px; }
+    .desc { color: #888; font-size: 11px; }
+    .step-info { color: #7dd3fc; font-size: 12px; margin-left: 8px; }
+    .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .panels:last-child { grid-template-columns: 2fr 1fr; }
+    .panel { background: #0d0d20; border: 1px solid #1e1e3e; border-radius: 6px; padding: 10px; max-height: 350px; overflow-y: auto; }
+    .panel.wide { grid-column: span 1; }
+    .item { display: flex; gap: 8px; align-items: center; padding: 3px 6px; border-radius: 3px; margin-bottom: 2px; font-size: 12px; }
+    .item.running { background: #0a2a0a; border-left: 3px solid #4ade80; }
+    .item.blocked { background: #2a0a0a; border-left: 3px solid #f87171; }
+    .item.terminated { background: #1a1a1a; border-left: 3px solid #555; color: #666; }
+    .item.ready { background: #0a0a2a; border-left: 3px solid #60a5fa; }
+    .pid { font-weight: bold; color: #facc15; min-width: 28px; }
+    .name { color: #c4b5fd; min-width: 80px; }
+    .state { color: #aaa; font-size: 11px; flex: 1; }
+    .stats { color: #555; font-size: 10px; }
+    .sem-item { background: #111128; border: 1px solid #1e1e3e; border-radius: 4px; padding: 6px 8px; margin-bottom: 4px; }
+    .sem-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .sem-name { font-weight: bold; color: #f472b6; }
+    .sem-type { color: #666; font-size: 11px; }
+    .sem-bar-container { position: relative; height: 16px; background: #1a1a2e; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+    .sem-bar { height: 100%; background: linear-gradient(90deg, #06b6d4, #22d3ee); transition: width .2s; }
+    .sem-value { position: absolute; top: 0; right: 4px; font-size: 10px; color: #ccc; line-height: 16px; }
+    .sem-stats { color: #666; font-size: 10px; }
+    .var-item { display: flex; gap: 10px; padding: 3px 6px; font-size: 12px; margin-bottom: 2px; }
+    .var-name { color: #34d399; font-weight: bold; min-width: 80px; }
+    .var-value { color: #fbbf24; min-width: 40px; font-weight: bold; }
+    .var-writer { color: #666; font-size: 11px; }
+    .log-item { font-size: 11px; color: #888; padding: 1px 4px; white-space: nowrap; }
+    .log-item.log-current { color: #e0e0e0; background: #14143a; border-radius: 2px; }
+    .event-item { font-size: 11px; padding: 2px 4px; margin-bottom: 1px; border-radius: 2px; }
+    .event-sem_wait { color: #22d3ee; }
+    .event-sem_post { color: #4ade80; }
+    .event-sem_block { color: #f87171; }
+    .event-sem_wakeup { color: #a78bfa; }
+    .event-sem_trywait_fail { color: #fb923c; }
+    .event-sem_timedout { color: #fbbf24; }
+    .event-deadlock { color: #ef4444; font-weight: bold; }
+    .event-create { color: #60a5fa; }
+    .event-terminate { color: #666; }
+    .event-schedule { color: #555; }
+    .event-comment { color: #888; font-style: italic; }
+    .empty { color: #555; font-style: italic; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/ui/app.ts"></script>
+</body>
+</html>

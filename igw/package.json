@@ -1,0 +1,17 @@
+{
+  "name": "igw-sim",
+  "version": "1.0.0",
+  "description": "AWS Internet Gateway simulator — 1:1 NAT, EIP, NAT-GW, route tables",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2",
+    "vitest": "^4.1.1"
+  }
+}

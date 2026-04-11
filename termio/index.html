@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UNIX 端末入出力 シミュレーター</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a1a; color: #e0e0e0; font-family: 'Menlo','Consolas',monospace; font-size: 13px; }
+    #app { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    h3 { font-size: 13px; color: #7dd3fc; margin-bottom: 8px; border-bottom: 1px solid #1e1e3e; padding-bottom: 4px; }
+    .controls { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .controls label { color: #aaa; font-size: 12px; }
+    select, button { background: #111128; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-family: inherit; font-size: 12px; }
+    select:hover, button:hover { border-color: #00d4ff; }
+    button:disabled { opacity: .4; cursor: default; }
+    input[type="range"] { width: 100px; }
+    .desc { color: #888; font-size: 11px; }
+    .step-info { color: #7dd3fc; font-size: 12px; margin-left: 8px; }
+
+    .panels { display: grid; gap: 10px; margin-bottom: 10px; }
+    .top-panels { grid-template-columns: 1fr 1fr; }
+    .bottom-panels { grid-template-columns: 1fr 1fr; }
+    .log-panels { grid-template-columns: 2fr 1fr; }
+    .panel { background: #0d0d20; border: 1px solid #1e1e3e; border-radius: 6px; padding: 10px; max-height: 320px; overflow-y: auto; }
+
+    /* 端末画面 */
+    .screen { background: #000; border: 1px solid #333; border-radius: 4px; padding: 8px; min-height: 120px; font-size: 13px; }
+    .screen-line { color: #0f0; line-height: 1.4; white-space: pre; min-height: 1.4em; }
+
+    /* termios */
+    .termios-mode { font-size: 14px; margin-bottom: 8px; color: #facc15; }
+    .flag-group { margin-bottom: 6px; }
+    .flag-title { font-size: 11px; color: #888; margin-bottom: 3px; }
+    .flag { display: inline-block; padding: 2px 6px; margin: 1px 2px; border-radius: 3px; font-size: 11px; }
+    .flag-on { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
+    .flag-off { background: #1a1a2e; color: #666; border: 1px solid #2a2a3a; }
+    .cc-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .cc-entry { font-size: 10px; color: #a78bfa; background: #1a1a2e; padding: 1px 5px; border-radius: 2px; }
+
+    /* Line Discipline */
+    .ld-item { display: flex; gap: 8px; padding: 2px 0; font-size: 12px; }
+    .ld-label { color: #888; min-width: 90px; }
+    .ld-value { color: #e0e0e0; }
+    .ld-value.stopped { color: #f87171; }
+    .ld-value.running { color: #4ade80; }
+
+    /* プロセス */
+    .proc-item { padding: 4px 8px; margin-bottom: 3px; border-radius: 3px; font-size: 12px; }
+    .proc-running { background: #0a2a0a; border-left: 3px solid #4ade80; }
+    .proc-stopped { background: #2a2a0a; border-left: 3px solid #facc15; }
+    .proc-term { background: #1a1a1a; border-left: 3px solid #555; color: #666; }
+    .proc-pid { font-weight: bold; color: #facc15; margin-right: 6px; }
+    .proc-name { color: #c4b5fd; margin-right: 6px; }
+    .proc-pgid { color: #666; font-size: 11px; margin-right: 6px; }
+    .proc-state { color: #aaa; font-size: 11px; }
+    .proc-fds { margin-top: 2px; }
+    .fd { font-size: 10px; color: #06b6d4; background: #0a1a2a; padding: 1px 4px; border-radius: 2px; margin-right: 4px; }
+
+    /* ログ */
+    .log-item { font-size: 11px; color: #888; padding: 1px 4px; white-space: nowrap; }
+    .log-item.log-current { color: #e0e0e0; background: #14143a; border-radius: 2px; }
+    .event-item { font-size: 11px; padding: 2px 4px; margin-bottom: 1px; border-radius: 2px; }
+    .ev-input { color: #22d3ee; }
+    .ev-output { color: #4ade80; }
+    .ev-signal { color: #f87171; font-weight: bold; }
+    .ev-termios_change { color: #facc15; }
+    .ev-line_discipline { color: #a78bfa; }
+    .ev-pty { color: #fb923c; }
+    .ev-flow_control { color: #f472b6; }
+    .ev-echo { color: #555; }
+    .ev-comment { color: #888; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/ui/app.ts"></script>
+</body>
+</html>

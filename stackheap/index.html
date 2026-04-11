@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stack &amp; Heap Simulator</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:"SF Mono","Fira Code",monospace;background:#0a0a0f;color:#c8ccd4;min-height:100vh}
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:1.4rem;color:#e8eaed;margin-bottom:20px;border-bottom:1px solid #2a2d35;padding-bottom:12px}
+    h2{font-size:.95rem;color:#9ca3af;margin-bottom:10px}
+    .controls{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+    .controls label{font-size:.85rem;color:#9ca3af}
+    .controls select{flex:1;min-width:200px;padding:8px 12px;background:#1a1d27;color:#e8eaed;border:1px solid #2a2d35;border-radius:6px;font-family:inherit;font-size:.8rem}
+    .controls button{padding:8px 20px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600}
+    .controls button:hover{background:#2563eb}
+    .step-nav{display:flex;gap:12px;align-items:center;margin-bottom:20px}
+    .step-nav button{padding:6px 16px;background:#1a1d27;color:#e8eaed;border:1px solid #2a2d35;border-radius:4px;cursor:pointer;font-family:inherit}
+    .step-nav button:hover:not(:disabled){background:#2a2d35}
+    .step-nav button:disabled{opacity:.3;cursor:default}
+    #step-info{font-size:.85rem;color:#9ca3af}
+    .step-message{padding:12px 16px;background:#12141c;border:1px solid #2a2d35;border-radius:8px;margin-bottom:20px}
+    .step-message .msg{font-size:.9rem;color:#e8eaed}
+    .step-message .detail{font-size:.8rem;color:#9ca3af;margin-top:4px}
+    .step-message .warning{font-size:.8rem;color:#f87171;margin-top:4px;font-weight:600}
+    .step-message.warn{border-color:#ef4444;background:#1c1215}
+    .mem-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+    .mem-col{background:#12141c;border:1px solid #2a2d35;border-radius:8px;padding:14px;overflow:hidden}
+    .empty{color:#6b7280;font-size:.8rem;padding:16px;text-align:center}
+    .stack-info,.heap-info{font-size:.75rem;color:#9ca3af;margin-bottom:10px;padding:6px 8px;background:#1a1d27;border-radius:4px}
+    .overflow{color:#ef4444;font-weight:700}
+    .stack-frames{display:flex;flex-direction:column;gap:8px}
+    .frame{background:#1a1d27;border:1px solid #2a2d35;border-radius:6px;padding:8px;font-size:.8rem}
+    .frame-current{border-color:#3b82f6;background:#141828}
+    .frame-header{font-weight:700;color:#60a5fa;margin-bottom:4px}
+    .frame-meta{font-size:.7rem;color:#6b7280;margin-bottom:6px}
+    .var{display:flex;gap:8px;align-items:center;padding:3px 6px;border-radius:3px;margin:2px 0}
+    .var:hover{background:#22243a}
+    .arg{background:#1c1a12}
+    .var-name{color:#fbbf24;min-width:60px}
+    .var-type{color:#6b7280;font-size:.7rem;min-width:60px}
+    .var-val{color:#e8eaed;margin-left:auto}
+    .heap-blocks{display:flex;flex-direction:column;gap:6px}
+    .heap-block{border-radius:6px;padding:8px;font-size:.8rem;border:1px solid #2a2d35}
+    .block-alloc{background:#111c15;border-color:#22c55e}
+    .block-freed{background:#1a1d27;border-color:#6b7280;opacity:.6}
+    .block-corrupt{background:#1c1215;border-color:#ef4444}
+    .block-header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .block-addr{color:#a78bfa;font-size:.75rem}
+    .block-label{color:#e8eaed;font-weight:600}
+    .block-size{color:#9ca3af;font-size:.7rem}
+    .block-status{margin-left:auto;font-size:.7rem;padding:2px 6px;border-radius:3px}
+    .block-alloc .block-status{background:#16a34a;color:#fff}
+    .block-freed .block-status{background:#4b5563;color:#d1d5db}
+    .block-corrupt .block-status{background:#dc2626;color:#fff}
+    .block-content{color:#9ca3af;font-size:.75rem;margin-top:4px;word-break:break-all}
+    .block-mark{font-size:.65rem;color:#22c55e;margin-top:2px}
+    .layout-section{background:#12141c;border:1px solid #2a2d35;border-radius:8px;padding:14px}
+    .layout-bar{display:flex;height:48px;border-radius:4px;overflow:hidden;margin:8px 0}
+    .seg{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;font-size:.6rem;overflow:hidden;min-width:0}
+    .seg-text{background:#3b82f6}
+    .seg-data{background:#8b5cf6}
+    .seg-bss{background:#6366f1}
+    .seg-heap{background:#22c55e}
+    .seg-free{background:#1a1d27;border-left:1px solid #2a2d35;border-right:1px solid #2a2d35}
+    .seg-stack{background:#f59e0b}
+    .seg-kernel{background:#ef4444}
+    .seg-label{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+    .seg-addr{color:rgba(255,255,255,.6)}
+    .seg-used{color:rgba(255,255,255,.8)}
+    .layout-legend{text-align:center;font-size:.7rem;color:#6b7280;margin-top:4px}
+    @media(max-width:700px){.mem-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/ui/app.ts"></script>
+</body>
+</html>

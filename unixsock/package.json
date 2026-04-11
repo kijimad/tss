@@ -1,0 +1,17 @@
+{
+  "name": "unixsock-sim",
+  "version": "1.0.0",
+  "description": "UNIXドメインソケット — STREAM/DGRAM/SEQPACKET、名前付き/無名/抽象、fd受け渡し、ピア認証",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2",
+    "vitest": "^4.1.1"
+  }
+}
