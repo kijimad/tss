@@ -2,21 +2,45 @@
  * parser.ts -- JavaScript パーサー (再帰下降)
  *
  * V8 パイプラインの第2段階: トークン列 → AST
+ *
+ * このモジュールは再帰下降パーサーを実装し、トークン列を
+ * 抽象構文木（AST）に変換する。演算子の優先順位は
+ * パーサーメソッドの呼び出し階層で表現される。
  */
 import { TT, type Token } from "../lexer/lexer.js";
 import type { Program, Stmt, Expr } from "./ast.js";
 
+/**
+ * 再帰下降パーサークラス
+ *
+ * トークン列を受け取り、ASTのProgram ノードを生成する。
+ * 各文法規則に対応するプライベートメソッドで構成される。
+ */
 export class Parser {
+  /** 解析対象のトークン配列 */
   private tokens: Token[];
+  /** 現在の読み取り位置 */
   private pos = 0;
+
+  /**
+   * @param tokens - レキサーが生成したトークン配列
+   */
   constructor(tokens: Token[]) { this.tokens = tokens; }
 
+  /**
+   * トークン列全体をパースし、Programノードを返す
+   * @returns パース結果のAST
+   */
   parse(): Program {
     const body: Stmt[] = [];
     while (!this.is(TT.Eof)) body.push(this.parseStmt());
     return { body };
   }
 
+  /**
+   * 1つの文をパースする
+   * トークンの種類に応じて適切な文のパーサーに委譲する
+   */
   private parseStmt(): Stmt {
     if (this.is(TT.Var) || this.is(TT.Let) || this.is(TT.Const)) return this.parseVarDecl();
     if (this.is(TT.Function)) return this.parseFuncDecl();
@@ -31,6 +55,7 @@ export class Parser {
     return { type: "expr_stmt", expr };
   }
 
+  /** 変数宣言（var / let / const）をパースする */
   private parseVarDecl(): Stmt {
     const kind = this.advance().value;
     const name = this.expect(TT.Identifier).value;
@@ -39,6 +64,7 @@ export class Parser {
     return { type: "var_decl", kind, name, init };
   }
 
+  /** 関数宣言をパースする */
   private parseFuncDecl(): Stmt {
     this.expect(TT.Function);
     const name = this.expect(TT.Identifier).value;
@@ -47,6 +73,7 @@ export class Parser {
     return { type: "function_decl", name, params, body };
   }
 
+  /** return文をパースする。値が省略された場合はundefinedを返す */
   private parseReturn(): Stmt {
     this.expect(TT.Return);
     if (this.is(TT.Semicolon) || this.is(TT.RightBrace) || this.is(TT.Eof)) { this.match(TT.Semicolon); return { type: "return_stmt", value: undefined }; }
@@ -55,6 +82,7 @@ export class Parser {
     return { type: "return_stmt", value };
   }
 
+  /** if文をパースする。else節がある場合はそれも含む */
   private parseIf(): Stmt {
     this.expect(TT.If); this.expect(TT.LeftParen);
     const test = this.parseExpr(); this.expect(TT.RightParen);
@@ -63,12 +91,14 @@ export class Parser {
     return { type: "if_stmt", test, consequent, alternate };
   }
 
+  /** while文をパースする */
   private parseWhile(): Stmt {
     this.expect(TT.While); this.expect(TT.LeftParen);
     const test = this.parseExpr(); this.expect(TT.RightParen);
     return { type: "while_stmt", test, body: this.parseStmt() };
   }
 
+  /** for文をパースする（初期化、条件、更新の各部は省略可能） */
   private parseFor(): Stmt {
     this.expect(TT.For); this.expect(TT.LeftParen);
     const init = this.is(TT.Semicolon) ? undefined : this.parseStmt();
@@ -79,7 +109,10 @@ export class Parser {
     return { type: "for_stmt", init, test, update, body: this.parseStmt() };
   }
 
+  /** ブロック文 { ... } をパースする */
   private parseBlock(): Stmt { return { type: "block", body: this.parseBlockBody() }; }
+
+  /** ブロック本体（中括弧内の文の配列）をパースする */
   private parseBlockBody(): Stmt[] {
     this.expect(TT.LeftBrace);
     const body: Stmt[] = [];
@@ -87,6 +120,7 @@ export class Parser {
     this.expect(TT.RightBrace);
     return body;
   }
+  /** 関数のパラメータリスト (a, b, c) をパースする */
   private parseParamList(): string[] {
     this.expect(TT.LeftParen);
     const params: string[] = [];
@@ -95,8 +129,12 @@ export class Parser {
     return params;
   }
 
-  // 式パーサー
+  // === 式パーサー（優先順位の低い順にメソッドが呼び出される） ===
+
+  /** 式全体のエントリポイント */
   private parseExpr(): Expr { return this.parseAssign(); }
+
+  /** 代入式をパースする（=, +=, -=, *=） */
   private parseAssign(): Expr {
     const left = this.parseConditional();
     if (this.is(TT.Eq) || this.is(TT.PlusEq) || this.is(TT.MinusEq) || this.is(TT.StarEq)) {
@@ -104,30 +142,40 @@ export class Parser {
     }
     return left;
   }
+  /** 条件式（三項演算子のプレースホルダ） */
   private parseConditional(): Expr { return this.parseOr(); }
+  /** 論理OR式 (||) をパースする */
   private parseOr(): Expr { let l = this.parseAnd(); while (this.match(TT.PipePipe)) { l = { type: "binary", op: "||", left: l, right: this.parseAnd() }; } return l; }
+  /** 論理AND式 (&&) をパースする */
   private parseAnd(): Expr { let l = this.parseEquality(); while (this.match(TT.AmpAmp)) { l = { type: "binary", op: "&&", left: l, right: this.parseEquality() }; } return l; }
+  /** 等価比較式 (==, !=, ===, !==) をパースする */
   private parseEquality(): Expr {
     let l = this.parseComparison();
     while (this.is(TT.EqEq) || this.is(TT.BangEq) || this.is(TT.EqEqEq) || this.is(TT.BangEqEq)) { const op = this.advance().value; l = { type: "binary", op, left: l, right: this.parseComparison() }; }
     return l;
   }
+  /** 大小比較式 (<, >, <=, >=) をパースする */
   private parseComparison(): Expr {
     let l = this.parseAddSub();
     while (this.is(TT.Lt) || this.is(TT.Gt) || this.is(TT.LtEq) || this.is(TT.GtEq)) { const op = this.advance().value; l = { type: "binary", op, left: l, right: this.parseAddSub() }; }
     return l;
   }
+  /** 加算・減算式 (+, -) をパースする */
   private parseAddSub(): Expr { let l = this.parseMulDiv(); while (this.is(TT.Plus) || this.is(TT.Minus)) { const op = this.advance().value; l = { type: "binary", op, left: l, right: this.parseMulDiv() }; } return l; }
+  /** 乗算・除算・剰余式 (*, /, %) をパースする */
   private parseMulDiv(): Expr { let l = this.parseUnary(); while (this.is(TT.Star) || this.is(TT.Slash) || this.is(TT.Percent)) { const op = this.advance().value; l = { type: "binary", op, left: l, right: this.parseUnary() }; } return l; }
+  /** 前置単項演算式 (-, !, ++, --) をパースする */
   private parseUnary(): Expr {
     if (this.is(TT.Minus) || this.is(TT.Bang) || this.is(TT.PlusPlus) || this.is(TT.MinusMinus)) { const op = this.advance().value; return { type: "unary", op, operand: this.parseUnary(), prefix: true }; }
     return this.parsePostfix();
   }
+  /** 後置単項演算式 (++, --) をパースする */
   private parsePostfix(): Expr {
     let e = this.parseCallMember();
     if (this.is(TT.PlusPlus) || this.is(TT.MinusMinus)) { const op = this.advance().value; e = { type: "unary", op, operand: e, prefix: false }; }
     return e;
   }
+  /** 関数呼び出し・メンバアクセス・添字アクセスをパースする */
   private parseCallMember(): Expr {
     let e = this.parsePrimary();
     while (true) {
@@ -138,6 +186,7 @@ export class Parser {
     }
     return e;
   }
+  /** 関数呼び出しの引数リスト (a, b, c) をパースする */
   private parseArgList(): Expr[] {
     this.expect(TT.LeftParen);
     const args: Expr[] = [];

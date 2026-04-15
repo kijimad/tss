@@ -1,3 +1,9 @@
+/**
+ * @module llvm
+ * LLVM IR シミュレーターの公開 API モジュール。
+ * エンジン、プリセット、型定義を一元的に再エクスポートする。
+ */
+
 export { runSimulation } from "./engine.js";
 export { presets } from "./presets.js";
 export { typeToString } from "./types.js";

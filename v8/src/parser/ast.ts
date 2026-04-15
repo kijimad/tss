@@ -1,5 +1,16 @@
 /**
- * ast.ts -- JavaScript AST ノード
+ * ast.ts -- JavaScript AST ノード定義
+ *
+ * このモジュールはJavaScriptの抽象構文木（AST）を表現する型を定義する。
+ * パーサーが生成し、バイトコードコンパイラが消費するデータ構造。
+ * 式（Expr）と文（Stmt）の2つの主要な型で構成される。
+ */
+
+/**
+ * 式ノードのユニオン型
+ *
+ * リテラル、識別子、二項演算、単項演算、代入、関数呼び出し、
+ * メンバアクセス、配列、オブジェクト、アロー関数などを表現する。
  */
 export type Expr =
   | { type: "number"; value: number }
@@ -22,6 +33,12 @@ export type Expr =
   | { type: "new_expr"; callee: Expr; args: Expr[] }
   | { type: "conditional"; test: Expr; consequent: Expr; alternate: Expr };
 
+/**
+ * 文ノードのユニオン型
+ *
+ * 式文、変数宣言、関数宣言、return文、if文、while文、
+ * for文、ブロック文、空文を表現する。
+ */
 export type Stmt =
   | { type: "expr_stmt"; expr: Expr }
   | { type: "var_decl"; kind: string; name: string; init: Expr | undefined }
@@ -33,4 +50,5 @@ export type Stmt =
   | { type: "block"; body: Stmt[] }
   | { type: "empty" };
 
+/** プログラム全体を表すインタフェース。トップレベルの文の配列を保持する */
 export interface Program { body: Stmt[]; }

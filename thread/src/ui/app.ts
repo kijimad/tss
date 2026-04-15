@@ -1,10 +1,20 @@
-/* UNIX スレッド シミュレーター UI */
+/**
+ * UNIX スレッド シミュレーター UIモジュール
+ *
+ * ブラウザ上でシミュレーション結果を可視化するUIを提供する。
+ * プリセット選択、ステップ実行（前進・後退）、スレッド状態表示、
+ * 同期オブジェクト表示、共有変数表示の機能を含む。
+ */
 
 import { simulate } from "../thread/engine.js";
 import { PRESETS } from "../thread/presets.js";
 import type { SimOp, TickResult, Thread } from "../thread/types.js";
 
-/** アプリ初期化 */
+/**
+ * アプリケーションを初期化する
+ * DOM要素の構築、プリセットセレクトボックスの生成、
+ * イベントリスナーの登録を行い、初回シミュレーションを実行する。
+ */
 export function initApp(): void {
   const app = document.getElementById("app")!;
   app.innerHTML = `
@@ -38,9 +48,16 @@ export function initApp(): void {
   run();
 }
 
+/** シミュレーション全ティックの結果配列 */
 let ticks: TickResult[] = [];
+/** 現在表示中のステップインデックス */
 let step = 0;
 
+/**
+ * シミュレーションを実行する
+ * 選択されたプリセットからSimOpを生成し、シミュレーションを実行して
+ * 結果を画面に描画する。
+ */
 function run(): void {
   const idx = parseInt((document.getElementById("preset") as HTMLSelectElement).value, 10);
   const ops: SimOp[] = PRESETS[idx].build();
@@ -50,11 +67,19 @@ function run(): void {
   render();
 }
 
+/**
+ * ステップを前後に移動する
+ * @param d - 移動量（-1で前へ、+1で次へ）
+ */
 function nav(d: number): void {
   step = Math.max(0, Math.min(ticks.length - 1, step + d));
   render();
 }
 
+/**
+ * 現在のステップの状態を画面に描画する
+ * スレッド一覧、同期オブジェクト、共有変数の情報をHTML要素に反映する。
+ */
 function render(): void {
   if (ticks.length === 0) return;
   const t = ticks[step];
@@ -86,6 +111,12 @@ function render(): void {
   `;
 }
 
+/**
+ * スレッド一覧のHTML文字列を生成する
+ * 各スレッドのTID、名前、状態、CPU/待機時間を表示する。
+ * @param t - 描画対象のTickResult
+ * @returns スレッド一覧のHTML文字列
+ */
 function renderThreads(t: TickResult): string {
   return `<div class="thread-list">${t.threads.map(th => {
     const cls = `state-${th.state}`;
@@ -99,6 +130,12 @@ function renderThreads(t: TickResult): string {
   }).join("")}</div>`;
 }
 
+/**
+ * スレッド状態のラベル文字列を生成する
+ * blocked状態の場合はブロック理由と詳細を含めた文字列を返す。
+ * @param th - 対象のスレッド
+ * @returns 状態ラベル文字列
+ */
 function stateLabel(th: Thread): string {
   if (th.state === "blocked" && th.blockReason) {
     return `blocked(${th.blockReason}${th.blockDetail ? `:${th.blockDetail}` : ""})`;
@@ -106,6 +143,12 @@ function stateLabel(th: Thread): string {
   return th.state;
 }
 
+/**
+ * 同期オブジェクト一覧のHTML文字列を生成する
+ * Mutex、条件変数、Read-Writeロック、バリアの状態を表示する。
+ * @param t - 描画対象のTickResult
+ * @returns 同期オブジェクト一覧のHTML文字列
+ */
 function renderSync(t: TickResult): string {
   let html = "";
   for (const m of t.mutexes) {

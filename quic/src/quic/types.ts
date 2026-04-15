@@ -1,8 +1,18 @@
-/* QUIC プロトコル シミュレーター 型定義 */
+/**
+ * @module types
+ * @description QUICプロトコルシミュレーターで使用する全ての型定義モジュール。
+ * 接続状態、パケット構造、ストリーム、フロー制御、輻輳制御、TLS 1.3、
+ * コネクションマイグレーション、ネットワークシミュレーション、
+ * およびシミュレーション操作・結果の型を定義する。
+ */
 
 // ─── 接続状態 ───
 
-/** QUIC接続状態 */
+/**
+ * QUIC接続の状態遷移を表すユニオン型。
+ * idle → handshake_initial → handshake_server → handshake_complete → connected → closing → draining → closed
+ * の順に遷移する。retryはサーバーからRetryパケットを受け取った場合に使用。
+ */
 export type ConnectionState =
   | "idle"
   | "handshake_initial"   // Initial パケット送信
@@ -14,12 +24,21 @@ export type ConnectionState =
   | "draining"            // ドレイン期間
   | "closed";
 
-/** 暗号化レベル */
+/**
+ * QUICの暗号化レベル。
+ * ハンドシェイクの進行に応じてinitial → handshake → one_rttと昇格する。
+ * zero_rttはPSKを使用した早期データ送信時に使用する。
+ */
 export type EncryptionLevel = "initial" | "handshake" | "zero_rtt" | "one_rtt";
 
 // ─── パケット ───
 
-/** QUICパケットタイプ */
+/**
+ * QUICパケットタイプ。
+ * initial/zero_rtt/handshakeはロングヘッダ、one_rttはショートヘッダを使用する。
+ * retryはサーバーがアドレス検証のために返すパケットタイプ。
+ * version_negotiationはバージョン不一致時にサーバーが返すパケットタイプ。
+ */
 export type PacketType =
   | "initial"
   | "zero_rtt"
@@ -28,7 +47,10 @@ export type PacketType =
   | "one_rtt"    // Short Header
   | "version_negotiation";
 
-/** QUICパケットヘッダ */
+/**
+ * QUICパケットヘッダ。
+ * ロングヘッダ（initial/handshake/zero_rtt/retry）とショートヘッダ（one_rtt）の共通構造。
+ */
 export interface PacketHeader {
   type: PacketType;
   version: number;                // QUICバージョン(1)
@@ -41,7 +63,12 @@ export interface PacketHeader {
   token?: string;
 }
 
-/** QUICフレームタイプ */
+/**
+ * QUICフレームタイプ。
+ * QUICパケットは1つ以上のフレームを含み、各フレームが特定の機能を担う。
+ * stream: データ転送、ack: 受信確認、crypto: TLSハンドシェイク、
+ * connection_close: 接続終了等。
+ */
 export type FrameType =
   | "padding"
   | "ping"
@@ -64,7 +91,11 @@ export type FrameType =
   | "connection_close"
   | "handshake_done";
 
-/** QUICフレーム */
+/**
+ * QUICフレーム。
+ * 各フレームタイプに応じたオプショナルフィールドを持つ。
+ * フレームタイプによって使用されるフィールドが異なる。
+ */
 export interface QuicFrame {
   type: FrameType;
   /** ストリームID（streamフレーム） */
@@ -89,7 +120,11 @@ export interface QuicFrame {
   challengeData?: string;
 }
 
-/** QUICパケット */
+/**
+ * QUICパケット。
+ * ヘッダ、フレーム群、サイズ、送信時刻、暗号化レベル、ACK/ロスト状態を保持する。
+ * シミュレーションにおけるパケットのライフサイクル追跡に使用。
+ */
 export interface QuicPacket {
   header: PacketHeader;
   frames: QuicFrame[];
@@ -107,7 +142,10 @@ export interface QuicPacket {
 
 // ─── ストリーム ───
 
-/** ストリーム状態 */
+/**
+ * ストリーム状態。
+ * idle → open → half_closed_local/half_closed_remote → closed の遷移を表す。
+ */
 export type StreamState =
   | "idle"
   | "open"
@@ -115,10 +153,18 @@ export type StreamState =
   | "half_closed_remote"
   | "closed";
 
-/** ストリーム方向 */
+/**
+ * ストリーム方向。
+ * bidi: 双方向ストリーム（クライアント・サーバー両方がデータ送信可能）
+ * uni: 単方向ストリーム（開始側のみデータ送信可能）
+ */
 export type StreamDirection = "bidi" | "uni";
 
-/** QUICストリーム */
+/**
+ * QUICストリーム。
+ * QUIC接続内の個々のデータストリームを表現する。
+ * 各ストリームは独立したフロー制御とオフセット管理を持つ。
+ */
 export interface QuicStream {
   id: number;
   state: StreamState;
@@ -143,7 +189,11 @@ export interface QuicStream {
 
 // ─── フロー制御 ───
 
-/** フロー制御状態 */
+/**
+ * フロー制御状態。
+ * コネクションレベルの送受信量と上限を管理する。
+ * MAX_DATAフレームで受信側が上限を拡張する仕組み。
+ */
 export interface FlowControl {
   /** コネクションレベル: 送信済みバイト */
   connSendBytes: number;
@@ -159,10 +209,19 @@ export interface FlowControl {
 
 // ─── 輻輳制御 ───
 
-/** 輻輳制御アルゴリズム */
+/**
+ * 輻輳制御アルゴリズムの種別。
+ * new_reno: RFC 6582準拠のロスベースアルゴリズム
+ * cubic: 3次関数ベースのウィンドウ成長（Linux標準）
+ * bbr: 帯域推定ベースのGoogleのアルゴリズム
+ */
 export type CongestionAlgo = "new_reno" | "cubic" | "bbr";
 
-/** 輻輳制御状態 */
+/**
+ * 輻輳制御状態。
+ * スロースタート → 輻輳回避 → リカバリのフェーズ遷移と、
+ * cwnd、ssthresh、RTT推定値などの輻輳制御パラメータを保持する。
+ */
 export interface CongestionState {
   algo: CongestionAlgo;
   /** 輻輳ウィンドウ (bytes) */
@@ -187,7 +246,10 @@ export interface CongestionState {
 
 // ─── TLS 1.3 ───
 
-/** TLS 1.3 ハンドシェイクメッセージ */
+/**
+ * TLS 1.3 ハンドシェイクメッセージ種別。
+ * QUICはTLS 1.3を統合しており、CRYPTOフレーム内でTLSメッセージを交換する。
+ */
 export type TlsMessage =
   | "client_hello"
   | "server_hello"
@@ -197,7 +259,11 @@ export type TlsMessage =
   | "finished"
   | "new_session_ticket";
 
-/** TLS状態 */
+/**
+ * TLS 1.3の状態。
+ * ハンドシェイクの進行状況、0-RTTサポート、暗号スイート、
+ * ALPNプロトコル、セッションチケットなどを管理する。
+ */
 export interface TlsState {
   /** ハンドシェイク完了 */
   handshakeComplete: boolean;
@@ -217,7 +283,11 @@ export interface TlsState {
 
 // ─── コネクションマイグレーション ───
 
-/** パス状態 */
+/**
+ * コネクションマイグレーション時のパス状態。
+ * PATH_CHALLENGE/PATH_RESPONSEによる検証状況、
+ * ローカル/リモートアドレス、アクティブ状態を保持する。
+ */
 export interface PathState {
   id: number;
   localAddr: string;
@@ -231,7 +301,11 @@ export interface PathState {
 
 // ─── 接続全体 ───
 
-/** QUIC接続 */
+/**
+ * QUIC接続全体の状態を表すインターフェース。
+ * コネクションID、TLS状態、ストリーム、フロー制御、輻輳制御、
+ * パケット履歴、パス情報など、接続に関する全てのデータを集約する。
+ */
 export interface QuicConnection {
   /** ローカルコネクションID */
   localCid: string;
@@ -263,7 +337,11 @@ export interface QuicConnection {
 
 // ─── ネットワークシミュレーション ───
 
-/** ネットワーク条件 */
+/**
+ * シミュレーション用ネットワーク条件。
+ * 遅延、パケットロス率、帯域幅、ジッタを設定し、
+ * 様々なネットワーク環境をエミュレートする。
+ */
 export interface NetworkCondition {
   /** 遅延(ms) */
   latency: number;
@@ -277,7 +355,12 @@ export interface NetworkCondition {
 
 // ─── シミュレーション ───
 
-/** シミュレーション操作 */
+/**
+ * シミュレーション操作のユニオン型。
+ * 接続確立、データ送信、ストリーム管理、パスマイグレーション、
+ * パケットロスの強制発生、ネットワーク条件の変更など、
+ * シミュレーションで実行可能な全操作を表す。
+ */
 export type SimOp =
   | { type: "connect" }
   | { type: "connect_0rtt" }
@@ -290,13 +373,19 @@ export type SimOp =
   | { type: "close_connection" }
   | { type: "tick"; ms: number };
 
-/** イベント種別 */
+/**
+ * シミュレーションイベントの種別。
+ * UIでのフィルタリングやカラー分けに使用する。
+ */
 export type EventType =
   | "handshake" | "tls" | "packet_sent" | "packet_recv"
   | "packet_lost" | "packet_ack" | "stream" | "flow_control"
   | "congestion" | "migration" | "close" | "zero_rtt" | "info";
 
-/** シミュレーションイベント */
+/**
+ * シミュレーション中に発生したイベント。
+ * 時刻、種別、メッセージ、詳細情報を保持し、イベントログとして表示される。
+ */
 export interface SimEvent {
   time: number;
   type: EventType;
@@ -304,7 +393,11 @@ export interface SimEvent {
   detail?: string;
 }
 
-/** シミュレーション結果 */
+/**
+ * シミュレーション実行後の結果。
+ * 最終的な接続状態、イベントログ、統計情報（ハンドシェイクRTT数、
+ * 送信バイト数、ロスト/再送パケット数）を含む。
+ */
 export interface SimulationResult {
   connection: QuicConnection;
   events: SimEvent[];
@@ -318,7 +411,12 @@ export interface SimulationResult {
   retransmittedPackets: number;
 }
 
-/** プリセット */
+/**
+ * シミュレーションプリセット。
+ * UI上のセレクトボックスで選択可能な実験シナリオを定義する。
+ * 名前、説明、およびシミュレーション操作・ネットワーク条件・輻輳制御アルゴリズムを
+ * 生成するビルド関数を持つ。
+ */
 export interface Preset {
   name: string;
   description: string;

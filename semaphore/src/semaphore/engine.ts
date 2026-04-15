@@ -1,4 +1,21 @@
-/* UNIX セマフォ シミュレーター エンジン */
+/*
+ * UNIX セマフォ シミュレーター エンジン
+ *
+ * Dijkstra（ダイクストラ）のセマフォに基づく並行プロセスの
+ * シミュレーションエンジン。ティック駆動（離散時間）方式で
+ * 複数プロセスの並行実行をエミュレートする。
+ *
+ * アーキテクチャ概要:
+ *   1. 各ティックでスケジューラが実行プロセスを選択
+ *   2. 選択されたプロセスの命令を1つ実行
+ *   3. sleepカウンタ・timedwaitカウンタを更新
+ *   4. デッドロック検出を行い、必要に応じてシミュレーション終了
+ *   5. 各ティックの状態スナップショットをTickResultとして記録
+ *
+ * 実装するPOSIXセマフォAPI:
+ *   - sem_init / sem_open / sem_wait / sem_trywait / sem_timedwait
+ *   - sem_post / sem_getvalue / sem_close / sem_destroy
+ */
 
 import type {
   Process, Pid, Semaphore, SharedVar, SemInstr,
@@ -7,34 +24,57 @@ import type {
 
 // ─── 状態管理 ───
 
-/** シミュレーション内部状態 */
+/**
+ * シミュレーション内部状態
+ *
+ * シミュレーション全体の現在の状態を保持する可変オブジェクト。
+ * 各ティックごとに更新され、TickResultとしてスナップショットが取られる。
+ */
 interface SimState {
+  /** 全プロセスの配列（メインプロセス + 子プロセス） */
   processes: Process[];
+  /** セマフォのマップ（名前 → セマフォオブジェクト） */
   semaphores: Map<string, Semaphore>;
+  /** 共有変数のマップ（名前 → 共有変数オブジェクト） */
   sharedVars: Map<string, SharedVar>;
-  /** プロセスごとの命令列 */
+  /** プロセスごとの命令列マップ（PID → 命令配列） */
   instrMap: Map<Pid, SemInstr[]>;
+  /** 次に割り当てるPID（単調増加） */
   nextPid: Pid;
+  /** 現在のシミュレーションティック */
   tick: number;
+  /** 発生イベントの蓄積リスト */
   events: SimEvent[];
-  /** sleepカウンタ: pid→残りティック */
+  /** sleepカウンタ: sleep中のプロセスID → 残りティック数 */
   sleepCounters: Map<Pid, number>;
-  /** timedwaitカウンタ: pid→{sem, remaining} */
+  /**
+   * timedwaitカウンタ: sem_timedwait中のプロセスID → タイムアウト情報
+   * タイムアウトに達するとプロセスを自動的に起床させ、
+   * POSIXのETIMEDOUTに相当するエラーをセットする
+   */
   timedWaitCounters: Map<Pid, { sem: string; remaining: number }>;
 }
 
-/** 初期状態を作成 */
+/**
+ * 初期状態を作成
+ *
+ * SimOpに基づいてシミュレーションの初期状態を構築する。
+ * メインプロセス（pid=0）を生成し、共有変数を初期化する。
+ */
 function createState(op: SimOp): SimState {
+  // 共有変数の初期化（シミュレーション全体でプロセス間共有される）
   const sharedVars = new Map<string, SharedVar>();
   for (const sv of op.sharedVars) {
     sharedVars.set(sv.name, { name: sv.name, value: sv.value, lastWriter: null, accessLog: [] });
   }
 
+  // メインプロセスの生成（UNIXにおけるinitプロセスに相当）
   const mainProc: Process = {
     pid: 0, name: "main", state: "ready",
     pc: 0, cpuTime: 0, waitTime: 0, locals: {},
   };
 
+  // 命令マップにメインプロセスの命令列を登録
   const instrMap = new Map<Pid, SemInstr[]>();
   instrMap.set(0, op.mainInstructions);
 

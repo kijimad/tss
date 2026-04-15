@@ -1,3 +1,9 @@
+/**
+ * FTPシミュレーションライブラリのエントリーポイント。
+ * 型定義、シミュレーションエンジン、プリセットを再エクスポートする。
+ * @module ftp
+ */
+
 export type {
   FtpCommand, TransferMode, DataType, FsEntry, FtpUser,
   ControlMessage, DataTransfer, SessionState, SimStep,

@@ -1,4 +1,10 @@
-/* SQLインジェクション シミュレーター エンジン */
+/**
+ * @module engine
+ * @description SQLインジェクション シミュレーターのコアエンジン。
+ * SQL文の簡易パース、実行エミュレーション、防御機構（WAF・エスケープ・バリデーション等）、
+ * および攻撃シミュレーションのロジックを提供する。
+ * 実際のデータベースは使用せず、インメモリのデータ構造上でSQLの挙動を再現する。
+ */
 
 import type {
   Database, Row, ColumnDef,
@@ -9,7 +15,12 @@ import type {
 
 // ─── デフォルトデータベース ───
 
-/** テスト用データベースを構築 */
+/**
+ * テスト用のデフォルトデータベースを構築する。
+ * users, products, secrets の3テーブルを含み、
+ * SQLインジェクション攻撃のシミュレーションに使用する。
+ * @returns {Database} サンプルデータが格納されたデータベースオブジェクト
+ */
 export function createDefaultDb(): Database {
   return {
     tables: {
@@ -72,7 +83,13 @@ export function createDefaultDb(): Database {
 
 // ─── SQL パーサー（簡易） ───
 
-/** SQL文を簡易パースする */
+/**
+ * SQL文を簡易的にパースし、構造化されたオブジェクトに変換する。
+ * SELECT, INSERT, UPDATE, DELETE, DROP の各文タイプを識別し、
+ * スタックドクエリ（セミコロン区切りの複数SQL）やUNION句も検出する。
+ * @param {string} raw - パース対象の生SQL文字列
+ * @returns {ParsedSql} パース結果（文タイプ、テーブル名、WHERE条件等）
+ */
 export function parseSql(raw: string): ParsedSql {
   const trimmed = raw.trim();
 
@@ -120,7 +137,14 @@ export function parseSql(raw: string): ParsedSql {
   return { type: "UNKNOWN", raw: trimmed, stacked };
 }
 
-/** SELECT文をパース */
+/**
+ * SELECT文を詳細にパースする。
+ * UNION句の有無、カラムリスト、FROM句、WHERE条件を抽出する。
+ * @param {string} mainSql - メインのSELECT文
+ * @param {string} raw - 元の生SQL文字列
+ * @param {string[]} stacked - スタックドクエリのリスト
+ * @returns {ParsedSql} SELECT文のパース結果
+ */
 function parseSelect(mainSql: string, raw: string, stacked: string[]): ParsedSql {
   const hasUnion = /\bUNION\b/i.test(mainSql);
 
@@ -143,7 +167,12 @@ function parseSelect(mainSql: string, raw: string, stacked: string[]): ParsedSql
   };
 }
 
-/** SQLコメントを除去（-- 以降、文字列リテラル外のみ） */
+/**
+ * SQLコメントを除去する（ -- 以降を削除）。
+ * 文字列リテラル内のハイフンは無視し、リテラル外のコメントのみ削除する。
+ * @param {string} sql - コメント除去対象のSQL文字列
+ * @returns {string} コメントが除去されたSQL文字列
+ */
 function stripComments(sql: string): string {
   let result = "";
   let inString = false;
@@ -169,7 +198,12 @@ function stripComments(sql: string): string {
   return result.trim();
 }
 
-/** セミコロンで文を分割（文字列リテラル内は無視） */
+/**
+ * セミコロンでSQL文を分割する（スタックドクエリの検出）。
+ * 文字列リテラル内のセミコロンは無視し、トップレベルのセミコロンでのみ分割する。
+ * @param {string} sql - 分割対象のSQL文字列
+ * @returns {string[]} 分割されたSQL文の配列
+ */
 function splitStatements(sql: string): string[] {
   const parts: string[] = [];
   let current = "";
@@ -198,7 +232,13 @@ function splitStatements(sql: string): string[] {
 
 // ─── SQL 実行エンジン（簡易） ───
 
-/** SQLを実行する */
+/**
+ * SQL文をパースしてエミュレーション実行する。
+ * メインクエリに加え、スタックドクエリがあればそれらも順次実行する。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {string} sql - 実行するSQL文字列
+ * @returns {QueryResult} クエリの実行結果（成功/失敗、結果行、影響行数等）
+ */
 export function executeSql(db: Database, sql: string): QueryResult {
   const parsed = parseSql(sql);
 
@@ -224,7 +264,13 @@ export function executeSql(db: Database, sql: string): QueryResult {
   return { ...result, executedSql: sql };
 }
 
-/** 単一SQL文を実行 */
+/**
+ * パース済みの単一SQL文を実行する。
+ * SELECT/INSERT/UPDATE/DELETE/DROPの各文タイプに応じたハンドラに処理を委譲する。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {ParsedSql} parsed - パース済みのSQL構造体
+ * @returns {QueryResult} 実行結果
+ */
 function executeStatement(db: Database, parsed: ParsedSql): QueryResult {
   try {
     switch (parsed.type) {
@@ -251,7 +297,13 @@ function executeStatement(db: Database, parsed: ParsedSql): QueryResult {
   }
 }
 
-/** SELECT文実行 */
+/**
+ * SELECT文を実行し、テーブルから行を取得する。
+ * WHERE条件によるフィルタリング、カラム選択、UNION処理を行う。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {ParsedSql} parsed - パース済みのSELECT文
+ * @returns {QueryResult} 取得した行データを含む実行結果
+ */
 function executeSelect(db: Database, parsed: ParsedSql): QueryResult {
   const table = parsed.table ? db.tables[parsed.table] : undefined;
   if (!table && parsed.table) {
@@ -286,7 +338,13 @@ function executeSelect(db: Database, parsed: ParsedSql): QueryResult {
   return { success: true, rows, affectedRows: 0, executedSql: parsed.raw };
 }
 
-/** UNION SELECT部分の実行 */
+/**
+ * UNION SELECT部分を実行し、結合結果の行を返す。
+ * FROM句がある場合はテーブルから取得し、ない場合はリテラル値として解釈する。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {string} sql - UNION句を含む元のSQL文字列
+ * @returns {Row[]} UNION SELECTで取得した行の配列
+ */
 function executeUnion(db: Database, sql: string): Row[] {
   const unionParts = sql.split(/\bUNION\s+(?:ALL\s+)?SELECT\b/i);
   if (unionParts.length <= 1) return [];
@@ -315,7 +373,12 @@ function executeUnion(db: Database, sql: string): Row[] {
   return results;
 }
 
-/** 値のクリーニング */
+/**
+ * SQL値のクリーニングを行う。
+ * 引用符を除去し、数値に変換可能な場合はnumber型として返す。
+ * @param {string} v - クリーニング対象の値文字列
+ * @returns {string | number} クリーニングされた値
+ */
 function cleanValue(v: string): string | number {
   const stripped = v.replace(/['"`]/g, "").trim();
   const num = Number(stripped);
@@ -323,7 +386,14 @@ function cleanValue(v: string): string | number {
   return stripped;
 }
 
-/** WHERE条件の評価（簡易） */
+/**
+ * WHERE条件を評価し、条件に合致する行のみをフィルタリングする。
+ * OR条件およびAND条件の組み合わせに対応する簡易的な評価器。
+ * @param {Row[]} rows - フィルタ対象の行データ配列
+ * @param {string} where - WHERE句の条件文字列
+ * @param {ColumnDef[]} _columns - カラム定義（将来の型チェック拡張用）
+ * @returns {Row[]} 条件に合致する行の配列
+ */
 function evaluateWhere(rows: Row[], where: string, _columns: ColumnDef[]): Row[] {
   // OR条件の分割
   const orParts = splitByOperator(where, "OR");
@@ -337,7 +407,13 @@ function evaluateWhere(rows: Row[], where: string, _columns: ColumnDef[]): Row[]
   });
 }
 
-/** 論理演算子で分割（括弧を考慮） */
+/**
+ * 論理演算子（AND/OR）で式を分割する。
+ * 正規表現を使い、単語境界でマッチする演算子のみを分割対象とする。
+ * @param {string} expr - 分割対象の条件式
+ * @param {string} op - 分割に使用する演算子（"AND" または "OR"）
+ * @returns {string[]} 演算子で分割された部分式の配列
+ */
 function splitByOperator(expr: string, op: string): string[] {
   const regex = new RegExp(`\\b${op}\\b`, "gi");
   const parts: string[] = [];
@@ -352,7 +428,14 @@ function splitByOperator(expr: string, op: string): string[] {
   return parts.filter(p => p.length > 0);
 }
 
-/** 単一条件の評価 */
+/**
+ * 単一のWHERE条件を評価する。
+ * 等号比較、不等号比較、LIKE条件、数値比較（>, <, >=, <=）に対応。
+ * 常にtrueとなるトートロジー（1=1等）も検出する。
+ * @param {Row} row - 評価対象の行データ
+ * @param {string} condition - 評価する条件式文字列
+ * @returns {boolean} 条件に合致すればtrue
+ */
 function evaluateCondition(row: Row, condition: string): boolean {
   // 常にtrue: 1=1, '1'='1', ''='' 等
   if (/^['"]?(\w*)['"]?\s*=\s*['"]?\1['"]?$/.test(condition.trim())) return true;
@@ -404,7 +487,13 @@ function evaluateCondition(row: Row, condition: string): boolean {
   return false;
 }
 
-/** UPDATE文実行 */
+/**
+ * UPDATE文を実行する。
+ * 実際のデータ更新は行わず、影響行数のシミュレーションのみを行う。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {ParsedSql} parsed - パース済みのUPDATE文
+ * @returns {QueryResult} 影響行数を含む実行結果
+ */
 function executeUpdate(db: Database, parsed: ParsedSql): QueryResult {
   const table = parsed.table ? db.tables[parsed.table] : undefined;
   if (!table) {
@@ -421,7 +510,13 @@ function executeUpdate(db: Database, parsed: ParsedSql): QueryResult {
   };
 }
 
-/** DELETE文実行 */
+/**
+ * DELETE文を実行する。
+ * 実際のデータ削除は行わず、影響行数のシミュレーションのみを行う。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {ParsedSql} parsed - パース済みのDELETE文
+ * @returns {QueryResult} 影響行数を含む実行結果
+ */
 function executeDelete(db: Database, parsed: ParsedSql): QueryResult {
   const table = parsed.table ? db.tables[parsed.table] : undefined;
   if (!table) {
@@ -433,7 +528,13 @@ function executeDelete(db: Database, parsed: ParsedSql): QueryResult {
   return { success: true, rows: [], affectedRows: affected, executedSql: parsed.raw };
 }
 
-/** DROP文実行 */
+/**
+ * DROP TABLE文を実行する。
+ * 指定テーブルが存在するかチェックし、結果を返す（実際の削除は行わない）。
+ * @param {Database} db - 実行対象のデータベース
+ * @param {ParsedSql} parsed - パース済みのDROP文
+ * @returns {QueryResult} テーブル存在チェック結果を含む実行結果
+ */
 function executeDrop(db: Database, parsed: ParsedSql): QueryResult {
   if (parsed.table && db.tables[parsed.table]) {
     return { success: true, rows: [], affectedRows: 0, executedSql: parsed.raw };
@@ -443,12 +544,23 @@ function executeDrop(db: Database, parsed: ParsedSql): QueryResult {
 
 // ─── 防御機構 ───
 
-/** エスケープ処理 */
+/**
+ * SQL入力値のエスケープ処理を行う。
+ * シングルクォート、バックスラッシュ、ダブルクォートをエスケープする。
+ * @param {string} input - エスケープ対象の入力文字列
+ * @returns {string} エスケープ済み文字列
+ */
 export function escapeSqlInput(input: string): string {
   return input.replace(/'/g, "''").replace(/\\/g, "\\\\").replace(/"/g, '""');
 }
 
-/** WAF パターンチェック */
+/**
+ * WAF（Webアプリケーションファイアウォール）のパターンチェックを行う。
+ * UNION SELECT、OR条件、SQLコメント、スタックドクエリ、DROP TABLE等の
+ * 危険なパターンを検出し、ブロック判定を返す。
+ * @param {string} input - チェック対象の入力文字列
+ * @returns {{ blocked: boolean; reason?: string }} ブロック判定とその理由
+ */
 export function wafCheck(input: string): { blocked: boolean; reason?: string } {
   const patterns: [RegExp, string][] = [
     [/\bUNION\b.*\bSELECT\b/i, "UNION SELECT パターン検出"],
@@ -472,7 +584,14 @@ export function wafCheck(input: string): { blocked: boolean; reason?: string } {
   return { blocked: false };
 }
 
-/** 入力バリデーション（型チェック） */
+/**
+ * 入力値の型バリデーションを行う。
+ * 整数型の場合は数字のみであることを検証し、
+ * テキスト型の場合はSQLで特殊な意味を持つ文字（; ' " \）が含まれていないことを検証する。
+ * @param {string} input - バリデーション対象の入力文字列
+ * @param {"integer" | "text"} expectedType - 期待される入力値の型
+ * @returns {{ valid: boolean; reason?: string }} バリデーション結果と拒否理由
+ */
 export function validateInput(input: string, expectedType: "integer" | "text"): { valid: boolean; reason?: string } {
   if (expectedType === "integer") {
     if (!/^\d+$/.test(input.trim())) {
@@ -488,7 +607,13 @@ export function validateInput(input: string, expectedType: "integer" | "text"): 
   return { valid: true };
 }
 
-/** ホワイトリストチェック */
+/**
+ * ホワイトリスト方式の入力チェックを行う。
+ * 許可された正規表現パターンに一致しない入力を拒否する。
+ * @param {string} input - チェック対象の入力文字列
+ * @param {RegExp} allowed - 許可する入力パターンの正規表現
+ * @returns {{ valid: boolean; reason?: string }} チェック結果と拒否理由
+ */
 export function whitelistCheck(input: string, allowed: RegExp): { valid: boolean; reason?: string } {
   if (!allowed.test(input)) {
     return { valid: false, reason: `入力 '${input}' はホワイトリストに一致しません` };
@@ -498,7 +623,14 @@ export function whitelistCheck(input: string, allowed: RegExp): { valid: boolean
 
 // ─── 攻撃シミュレーション ───
 
-/** 攻撃をシミュレート */
+/**
+ * 単一の攻撃操作をシミュレートする。
+ * 入力受付 → 防御チェック（WAF/バリデーション/ホワイトリスト/エスケープ） →
+ * SQL構築 → 権限チェック → SQL実行 → 攻撃結果分析 の各フェーズを順に実行し、
+ * 各ステップの詳細ログと最終的な攻撃成否を返す。
+ * @param {SimOp} op - シミュレーション操作の定義（攻撃ペイロード、防御設定等）
+ * @returns {AttackResult} 攻撃シミュレーションの詳細結果
+ */
 export function simulateAttack(op: SimOp): AttackResult {
   const steps: SimStep[] = [];
   const blocked: string[] = [];
@@ -691,14 +823,28 @@ export function simulateAttack(op: SimOp): AttackResult {
   };
 }
 
-/** パラメータ化クエリを構築（ペイロードを安全なリテラルとして扱う） */
+/**
+ * パラメータ化クエリを構築する。
+ * ペイロードを安全な文字列リテラルとして埋め込み、インジェクションを防止する。
+ * @param {string} template - クエリテンプレート（${input}をプレースホルダとして含む）
+ * @param {string} value - バインドするパラメータ値
+ * @returns {string} パラメータが安全に埋め込まれたSQL文字列
+ */
 function buildParameterizedQuery(template: string, value: string): string {
   // ペイロード全体を1つの文字列リテラルとして埋め込む
   const safe = value.replace(/'/g, "''");
   return template.replace("${input}", safe);
 }
 
-/** インジェクション成功の分析 */
+/**
+ * インジェクション攻撃の成否を分析する。
+ * 正常クエリとの構造差分、OR条件の挿入、時間ベース攻撃関数の有無を検出する。
+ * @param {SimOp} op - シミュレーション操作の定義
+ * @param {string} sql - 構築されたSQL文
+ * @param {QueryResult} result - クエリ実行結果
+ * @param {SimStep[]} steps - 分析結果を追記するステップ配列
+ * @returns {boolean} インジェクションが成功した場合true
+ */
 function analyzeInjection(op: SimOp, sql: string, result: QueryResult, steps: SimStep[]): boolean {
   const template = op.queryTemplate;
   const legitimate = op.legitimateInput ?? "";
@@ -735,7 +881,15 @@ function analyzeInjection(op: SimOp, sql: string, result: QueryResult, steps: Si
   return false;
 }
 
-/** データ漏洩の分析 */
+/**
+ * データ漏洩の発生を分析する。
+ * パスワード、APIキー等の機密フィールドが結果に含まれるか、
+ * UNION攻撃やWHERE条件操作で意図しないデータが取得されたかを判定する。
+ * @param {SimOp} op - シミュレーション操作の定義
+ * @param {QueryResult} result - クエリ実行結果
+ * @param {SimStep[]} steps - 分析結果を追記するステップ配列
+ * @returns {boolean} データ漏洩が発生した場合true
+ */
 function analyzeDataLeak(op: SimOp, result: QueryResult, steps: SimStep[]): boolean {
   if (!result.success || result.rows.length === 0) return false;
 
@@ -777,7 +931,15 @@ function analyzeDataLeak(op: SimOp, result: QueryResult, steps: SimStep[]): bool
   return false;
 }
 
-/** データ改ざんの分析 */
+/**
+ * データ改ざん・破壊の発生を分析する。
+ * DROP/DELETE/UPDATE文が実行されたか、スタックドクエリで破壊的操作が行われたかを判定する。
+ * @param {SimOp} _op - シミュレーション操作の定義（未使用）
+ * @param {ParsedSql} parsed - パース済みのSQL構造体
+ * @param {QueryResult} result - クエリ実行結果
+ * @param {SimStep[]} steps - 分析結果を追記するステップ配列
+ * @returns {boolean} データ改ざん・破壊が発生した場合true
+ */
 function analyzeDataModification(_op: SimOp, parsed: ParsedSql, result: QueryResult, steps: SimStep[]): boolean {
   const destructive = parsed.type === "DROP" || parsed.type === "DELETE" || parsed.type === "UPDATE";
   const stackedDestructive = parsed.stacked?.some(s => /^\s*(DROP|DELETE|UPDATE)/i.test(s));
@@ -795,7 +957,15 @@ function analyzeDataModification(_op: SimOp, parsed: ParsedSql, result: QueryRes
   return false;
 }
 
-/** 認証バイパスの分析 */
+/**
+ * 認証バイパスの発生を分析する。
+ * ログインクエリ（passwordフィールドを含む）でOR条件やコメントによる
+ * 認証条件の無効化が行われたかを判定する。
+ * @param {SimOp} op - シミュレーション操作の定義
+ * @param {QueryResult} result - クエリ実行結果
+ * @param {SimStep[]} steps - 分析結果を追記するステップ配列
+ * @returns {boolean} 認証バイパスが発生した場合true
+ */
 function analyzeAuthBypass(op: SimOp, result: QueryResult, steps: SimStep[]): boolean {
   if (op.queryTemplate.toLowerCase().includes("password") && result.success && result.rows.length > 0) {
     // ログインクエリで結果が返された = 認証バイパス
@@ -811,7 +981,11 @@ function analyzeAuthBypass(op: SimOp, result: QueryResult, steps: SimStep[]): bo
   return false;
 }
 
-/** 結果を構築 */
+/**
+ * 攻撃結果オブジェクトを構築する。
+ * 主に防御によりブロックされた場合の結果生成に使用する。
+ * @returns {AttackResult} 構築された攻撃結果
+ */
 function buildResult(
   op: SimOp, constructedSql: string, steps: SimStep[],
   blocked: string[], mitigations: string[], _db: Database,
@@ -835,7 +1009,10 @@ function buildResult(
   };
 }
 
-/** 防御勧告を生成 */
+/**
+ * 攻撃結果に基づいて防御勧告（改善提案）を生成する。
+ * 有効化されていない防御機構に対して、導入を推奨するメッセージを追加する。
+ */
 function generateMitigations(
   op: SimOp, injectionSucceeded: boolean, dataLeaked: boolean, dataModified: boolean,
   blocked: string[], mitigations: string[],
@@ -868,7 +1045,11 @@ function generateMitigations(
   }
 }
 
-/** 入力方法のラベル */
+/**
+ * 入力方法の識別子を日本語ラベルに変換する。
+ * @param {string} m - 入力方法の識別子（url_param, form_post等）
+ * @returns {string} 日本語の入力方法ラベル
+ */
 export function inputMethodLabel(m: string): string {
   const labels: Record<string, string> = {
     url_param: "URLパラメータ",
@@ -879,7 +1060,11 @@ export function inputMethodLabel(m: string): string {
   return labels[m] ?? m;
 }
 
-/** インジェクション種別のラベル */
+/**
+ * インジェクション種別の識別子を日本語ラベルに変換する。
+ * @param {string} t - インジェクション種別の識別子（classic, union_based等）
+ * @returns {string} 日本語のインジェクション種別ラベル
+ */
 export function injectionTypeLabel(t: string): string {
   const labels: Record<string, string> = {
     classic: "クラシック",
@@ -895,7 +1080,11 @@ export function injectionTypeLabel(t: string): string {
 
 // ─── 防御プリセット ───
 
-/** 防御なし */
+/**
+ * 全防御機構を無効にした防御設定を返す。
+ * 攻撃が成功するケースのデモに使用する。
+ * @returns {Defense} 全防御無効の設定オブジェクト
+ */
 export function noDefense(): Defense {
   return {
     parameterized: false, escaping: false, inputValidation: false,
@@ -903,12 +1092,20 @@ export function noDefense(): Defense {
   };
 }
 
-/** パラメータ化クエリのみ */
+/**
+ * パラメータ化クエリのみを有効にした防御設定を返す。
+ * 最も効果的な単一防御策のデモに使用する。
+ * @returns {Defense} パラメータ化クエリのみ有効の設定オブジェクト
+ */
 export function parameterizedOnly(): Defense {
   return { ...noDefense(), parameterized: true };
 }
 
-/** エスケープのみ */
+/**
+ * エスケープ処理のみを有効にした防御設定を返す。
+ * エスケープの効果と限界を示すデモに使用する。
+ * @returns {Defense} エスケープのみ有効の設定オブジェクト
+ */
 export function escapingOnly(): Defense {
   return { ...noDefense(), escaping: true };
 }

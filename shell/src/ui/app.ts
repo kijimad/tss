@@ -1,3 +1,10 @@
+/**
+ * app.ts -- シェルインタプリタのUIモジュール
+ *
+ * ブラウザ上でシェルのターミナルUIを構築し、ユーザー入力の処理・
+ * コマンド実行結果の表示・実行トレースのサイドバー表示を行う。
+ * プリセットされたサンプルコマンドをセレクトボックスから選択・実行できる。
+ */
 import { ShellExecutor, type ShellEvent } from "../executor/executor.js";
 
 /** サンプルコマンドの型定義 */
@@ -58,17 +65,36 @@ export const EXAMPLES: ShellExample[] = [
   },
 ];
 
+/**
+ * シェルアプリケーションクラス
+ * ターミナルUI・キーボード入力処理・実行トレース表示・サンプルコマンド実行を管理する
+ */
 export class ShellApp {
+  /** シェル実行エンジンのインスタンス */
   private sh!: ShellExecutor;
+  /** ターミナル出力を表示するDOM要素 */
   private termDiv!: HTMLElement;
+  /** 実行トレースを表示するサイドバーDOM要素 */
   private traceDiv!: HTMLElement;
+  /** 現在の入力行テキスト */
   private inputLine = "";
+  /** コマンド履歴 */
   private history: string[] = [];
+  /** 履歴参照用のインデックス */
   private historyIdx = -1;
+  /** 現在の入力テキストを表示するspan要素 */
   private currentInputSpan: HTMLSpanElement | null = null;
+  /** カーソル表示用のspan要素 */
   private currentCursor: HTMLSpanElement | null = null;
+  /** 現在のプロンプト行のdiv要素 */
   private currentPromptLine: HTMLDivElement | null = null;
 
+  /**
+   * アプリケーションを初期化する
+   * ヘッダー・ターミナル・サイドバーのDOM構築、シェルエンジンの初期化、
+   * キーボードイベントのバインドを行う
+   * @param container - アプリケーションをマウントする親DOM要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Cascadia Code',monospace;background:#0c0c0c;color:#e0e0e0;";
     const header = document.createElement("div");
@@ -160,6 +186,11 @@ export class ShellApp {
     this.termDiv.focus();
   }
 
+  /**
+   * キーボード入力を処理する
+   * Enter: コマンド実行、Backspace: 文字削除、上下矢印: 履歴参照、
+   * Tab: 簡易ファイル名補完、Ctrl+L: 画面クリア
+   */
   private handleKey(e: KeyboardEvent): void {
     if (e.isComposing) return; e.preventDefault(); e.stopPropagation();
     if (e.key === "Enter") {

@@ -1,3 +1,13 @@
+/**
+ * bluetooth.test.ts — Bluetooth シミュレーター テストスイート
+ *
+ * テスト構成:
+ *   1. ユーティリティ関数 — RSSI計算、BD_ADDR生成、ペアリング方式決定、UUID操作
+ *   2. ファクトリ関数    — char(), svc(), createDevice() の動作確認
+ *   3. シミュレーター    — 全フロー、GATT操作、ペアリング4方式、PHY、MTU、書き込み
+ *   4. プリセット実験    — 全7プリセットが実行可能であることを確認
+ */
+
 import { describe, it, expect } from "vitest";
 import {
   rssiFromDistance, randomBdAddr, determinePairingMethod, expandUuid, uuidName,
@@ -6,7 +16,9 @@ import {
 import { EXPERIMENTS } from "../ui/app.js";
 import type { SimConfig, BleDevice } from "../engine/bluetooth.js";
 
-// ── ユーティリティ ──
+// ══════════════════════════════════════════════════════════════
+// ユーティリティ
+// ══════════════════════════════════════════════════════════════
 
 describe("rssiFromDistance", () => {
   it("距離 0 で txPower を返す", () => {
@@ -90,7 +102,9 @@ describe("KNOWN_UUIDS", () => {
   });
 });
 
-// ── ヘルパー ──
+// ══════════════════════════════════════════════════════════════
+// ファクトリ関数 (GATT 構築ヘルパー)
+// ══════════════════════════════════════════════════════════════
 
 describe("char", () => {
   it("Characteristic を作成する", () => {
@@ -133,7 +147,9 @@ describe("createDevice", () => {
   });
 });
 
-// ── シミュレーター ──
+// ══════════════════════════════════════════════════════════════
+// シミュレーター (全フロー検証)
+// ══════════════════════════════════════════════════════════════
 
 describe("BluetoothSimulator", () => {
   const peripheral = createDevice("TestDev", "AA:BB:CC:00:11:22", [
@@ -239,7 +255,9 @@ describe("BluetoothSimulator", () => {
   });
 });
 
-// ── プリセット実験 ──
+// ══════════════════════════════════════════════════════════════
+// プリセット実験 (全プリセットの動作確認)
+// ══════════════════════════════════════════════════════════════
 
 describe("EXPERIMENTS", () => {
   it("7 つのプリセット", () => {

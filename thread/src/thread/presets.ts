@@ -1,8 +1,19 @@
-/* UNIX スレッド シミュレーター プリセット */
+/**
+ * UNIX スレッド シミュレーター プリセットモジュール
+ *
+ * ブラウザUIのセレクトボックスから選択可能な実験シナリオを定義する。
+ * スレッド生成、Mutex、条件変数、Read-Writeロック、バリア、
+ * デッドロック、レースコンディション等の典型的なパターンを網羅する。
+ */
 
 import type { Preset, SimOp, ThreadInstr } from "./types.js";
 import { defaultConfig, fifoConfig } from "./engine.js";
 
+/**
+ * プリセット一覧
+ * UIのセレクトボックスに表示される全ての実験シナリオ。
+ * 各プリセットはbuild()を呼び出すことでSimOp配列を生成する。
+ */
 export const PRESETS: Preset[] = [
   {
     name: "基本スレッド生成",
@@ -291,7 +302,13 @@ export const PRESETS: Preset[] = [
   },
 ];
 
-/** Mutex保護付きカウンタワーカーを生成 */
+/**
+ * Mutex保護付きカウンタワーカースレッドの命令列を生成する
+ * 各ワーカーはMutexをロックしてからカウンタをインクリメントし、アンロックする。
+ * @param mutexId - 使用するMutexのID
+ * @param count - 生成するワーカースレッド数
+ * @returns スレッド生成命令の配列
+ */
 function createCounterWorkers(mutexId: string, count: number): ThreadInstr[] {
   const instrs: ThreadInstr[] = [];
   for (let i = 0; i < count; i++) {
@@ -307,7 +324,13 @@ function createCounterWorkers(mutexId: string, count: number): ThreadInstr[] {
   return instrs;
 }
 
-/** Mutex保護なしカウンタワーカーを生成 */
+/**
+ * Mutex保護なしカウンタワーカースレッドの命令列を生成する
+ * 各ワーカーはMutex無しでカウンタをインクリメントするため、
+ * レースコンディションが発生する可能性がある。
+ * @param count - 生成するワーカースレッド数
+ * @returns スレッド生成命令の配列
+ */
 function createUnsafeCounterWorkers(count: number): ThreadInstr[] {
   const instrs: ThreadInstr[] = [];
   for (let i = 0; i < count; i++) {

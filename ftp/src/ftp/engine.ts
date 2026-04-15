@@ -1,3 +1,11 @@
+/**
+ * FTPプロトコルシミュレーションエンジンモジュール。
+ * 仮想ファイルシステム上でFTPコマンドを順次実行し、
+ * コントロール接続メッセージ、データ転送、セッション状態の変化を記録する。
+ * RFC 959準拠のレスポンスコードを返す。
+ * @module ftp/engine
+ */
+
 import type {
   FtpCommand, DataType, FsEntry, FtpUser,
   ControlMessage, DataTransfer, SessionState, SimStep,
@@ -71,10 +79,22 @@ const NOW = "2026-04-10 12:00";
 
 // === FTPレスポンスコード ===
 
+/**
+ * FTPサーバーレスポンスメッセージを生成する。
+ * @param code - FTPレスポンスコード（例: 200, 530）
+ * @param msg - レスポンスメッセージ本文
+ * @returns サーバー方向のコントロールメッセージ
+ */
 function reply(code: number, msg: string): ControlMessage {
   return { direction: "server", raw: `${code} ${msg}`, description: msg };
 }
 
+/**
+ * クライアントから送信されたFTPコマンドメッセージを生成する。
+ * @param cmd - FTPコマンド名
+ * @param arg - コマンド引数
+ * @returns クライアント方向のコントロールメッセージ
+ */
 function clientMsg(cmd: FtpCommand, arg: string): ControlMessage {
   const raw = arg ? `${cmd} ${arg}` : cmd;
   return { direction: "client", raw, description: `${cmd}コマンド送信` };
@@ -82,6 +102,15 @@ function clientMsg(cmd: FtpCommand, arg: string): ControlMessage {
 
 // === シミュレーションエンジン ===
 
+/**
+ * FTPセッションのシミュレーションを実行する。
+ * 与えられたコマンド列を順次処理し、各ステップでのコントロールメッセージ、
+ * データ転送、セッション状態の変化を記録した結果を返す。
+ * @param users - 認証に使用するFTPユーザー一覧
+ * @param initialFs - シミュレーション開始時の仮想ファイルシステム
+ * @param commands - 実行するFTPコマンドの配列
+ * @returns シミュレーション結果（ステップ一覧と最終ファイルシステム状態）
+ */
 export function runSimulation(
   users: FtpUser[], initialFs: FsEntry, commands: ClientCommand[],
 ): SimulationResult {
@@ -101,9 +130,12 @@ export function runSimulation(
     pasvPort: null,
   };
 
+  /** 認証待ちのユーザー名（USERコマンド送信後、PASS待ち） */
   let pendingUser: string | null = null;
+  /** パッシブモードで割り当てるポート番号のカウンター */
   let pasvPortCounter = 50000;
 
+  /** 現在のセッション状態のスナップショットを取得する */
   function snap(): SessionState {
     return { ...session };
   }

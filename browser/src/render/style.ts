@@ -110,6 +110,7 @@ interface MatchedRule {
 export function resolveStyles(root: DomNode, stylesheet: Stylesheet): StyleMap {
   const styleMap: StyleMap = new Map();
 
+  /** DOMツリーを再帰的に走査し、各要素のスタイルを計算する */
   function walk(node: DomNode, ancestors: ElementNode[], parentStyles: ComputedStyles): void {
     if (node.type === 'text') return;
 

@@ -7,23 +7,44 @@
 
 // ── リソース型 ──
 
+/** Pod のライフサイクルフェーズを表す型 */
 export type PodPhase = "Pending" | "ContainerCreating" | "Running" | "Succeeded" | "Failed" | "Terminating" | "Evicted";
 
+/**
+ * コンテナの定義
+ * Pod 内で実行される個々のコンテナのリソース要求を含む
+ */
 export interface Container {
+  /** コンテナ名 */
   name: string;
+  /** コンテナイメージ (例: nginx:1.25) */
   image: string;
-  cpuRequest: number;   // ミリコア (m)
-  memRequest: number;   // MiB
+  /** CPU リクエスト (ミリコア単位, 例: 100 = 0.1コア) */
+  cpuRequest: number;
+  /** メモリリクエスト (MiB 単位) */
+  memRequest: number;
 }
 
+/**
+ * Pod リソースの定義
+ * Kubernetes における最小デプロイ単位。1つ以上のコンテナを含む
+ */
 export interface Pod {
+  /** Pod 名 (例: web-pod-1) */
   name: string;
+  /** 所属する名前空間 */
   namespace: string;
+  /** ラベルセレクタ用のキーバリューペア */
   labels: Record<string, string>;
+  /** Pod 内のコンテナ一覧 */
   containers: Container[];
+  /** 現在のフェーズ */
   phase: PodPhase;
+  /** スケジュールされたノード名 (未スケジュール時は null) */
   nodeName: string | null;
+  /** コンテナの再起動回数 */
   restarts: number;
+  /** 作成された tick 番号 */
   createdAt: number;
   /** Pod 全体の CPU request 合計 */
   totalCpu: number;
@@ -31,70 +52,138 @@ export interface Pod {
   totalMem: number;
 }
 
+/**
+ * Kubernetes ノードの定義
+ * ワーカーノードのリソース容量・割当量・状態を管理する
+ */
 export interface K8sNode {
+  /** ノード名 (例: node-1) */
   name: string;
-  cpuCapacity: number;   // ミリコア
-  memCapacity: number;   // MiB
+  /** CPU 容量 (ミリコア単位) */
+  cpuCapacity: number;
+  /** メモリ容量 (MiB 単位) */
+  memCapacity: number;
+  /** 現在割り当て済みの CPU (ミリコア) */
   cpuAllocated: number;
+  /** 現在割り当て済みのメモリ (MiB) */
   memAllocated: number;
+  /** ノードが Ready 状態かどうか */
   ready: boolean;
+  /** このノード上で稼働中の Pod 名一覧 */
   pods: string[];
+  /** ノードに付与された taint 一覧 (例: NoSchedule) */
   taints: string[];
 }
 
+/**
+ * ReplicaSet リソースの定義
+ * 指定されたレプリカ数の Pod を維持する責務を持つ
+ */
 export interface ReplicaSet {
+  /** ReplicaSet 名 */
   name: string;
+  /** 所属する名前空間 */
   namespace: string;
+  /** 目標レプリカ数 */
   replicas: number;
+  /** Pod を選択するためのラベルセレクタ */
   selector: Record<string, string>;
+  /** Pod テンプレート (ラベルとコンテナ定義) */
   template: { labels: Record<string, string>; containers: Container[] };
+  /** 現在稼働中のレプリカ数 */
   currentReplicas: number;
 }
 
+/**
+ * Deployment リソースの定義
+ * ReplicaSet を管理し、宣言的なアップデートとロールバックを提供する
+ */
 export interface Deployment {
+  /** Deployment 名 */
   name: string;
+  /** 所属する名前空間 */
   namespace: string;
+  /** 目標レプリカ数 */
   replicas: number;
+  /** Pod を選択するためのラベルセレクタ */
   selector: Record<string, string>;
+  /** Pod テンプレート */
   template: { labels: Record<string, string>; containers: Container[] };
+  /** 更新戦略 (RollingUpdate: 段階的更新, Recreate: 全停止後再作成) */
   strategy: "RollingUpdate" | "Recreate";
+  /** ローリングアップデート時に許容する最大利用不可 Pod 数 */
   maxUnavailable: number;
+  /** ローリングアップデート時に許容する最大超過 Pod 数 */
   maxSurge: number;
 }
 
+/**
+ * Service リソースの定義
+ * Pod 群に対する安定したネットワークエンドポイントを提供する
+ */
 export interface Service {
+  /** Service 名 */
   name: string;
+  /** 所属する名前空間 */
   namespace: string;
+  /** Service タイプ (ClusterIP: 内部のみ, NodePort: ノードポート公開, LoadBalancer: 外部LB) */
   type: "ClusterIP" | "NodePort" | "LoadBalancer";
+  /** バックエンド Pod を選択するためのラベルセレクタ */
   selector: Record<string, string>;
+  /** ポートマッピング (Service ポート → Pod ターゲットポート) */
   ports: { port: number; targetPort: number }[];
+  /** クラスタ内部 IP アドレス */
   clusterIP: string;
+  /** 現在のエンドポイント (Running 状態の Pod 名一覧) */
   endpoints: string[];
 }
 
 // ── イベント ──
 
+/**
+ * Kubernetes イベント
+ * クラスタ内で発生した操作や状態変化を記録する
+ */
 export interface K8sEvent {
+  /** イベント発生時の tick 番号 */
   tick: number;
+  /** リソースの種類 (Pod, Node, Deployment 等) */
   kind: string;
+  /** リソース名 */
   name: string;
+  /** イベントの理由 (Created, Scheduled, Killing 等) */
   reason: string;
+  /** イベントの詳細メッセージ */
   message: string;
 }
 
 // ── スナップショット ──
 
+/**
+ * クラスタの状態スナップショット
+ * ある時点でのクラスタ全体の状態を不変のコピーとして提供する
+ */
 export interface ClusterSnapshot {
+  /** 現在の tick 番号 */
   tick: number;
+  /** 全ノードの状態 */
   nodes: K8sNode[];
+  /** 全 Pod の状態 */
   pods: Pod[];
+  /** 全 ReplicaSet の状態 */
   replicaSets: ReplicaSet[];
+  /** 全 Deployment の状態 */
   deployments: Deployment[];
+  /** 全 Service の状態 */
   services: Service[];
 }
 
 // ── kubectl コマンド ──
 
+/**
+ * kubectl コマンドの型定義
+ * シミュレータが受け付ける操作コマンドを Union 型で表現する
+ */
 export type KubectlCommand =
   | { cmd: "apply-deployment"; deployment: Deployment }
   | { cmd: "apply-service"; service: Service }
@@ -107,17 +196,36 @@ export type KubectlCommand =
 
 // ── クラスタ ──
 
+/**
+ * Kubernetes クラスタシミュレータ本体
+ *
+ * コントロールプレーンの動作（スケジューリング、レプリカ管理、エンドポイント更新）を
+ * tick ベースでエミュレートする。各 tick で reconcile ループが 1 回実行される。
+ */
 export class Cluster {
+  /** クラスタ内の全ノード */
   private nodes: K8sNode[] = [];
+  /** クラスタ内の全 Pod */
   private pods: Pod[] = [];
+  /** クラスタ内の全 ReplicaSet */
   private replicaSets: ReplicaSet[] = [];
+  /** クラスタ内の全 Deployment */
   private deployments: Deployment[] = [];
+  /** クラスタ内の全 Service */
   private services: Service[] = [];
+  /** イベントログ */
   private events: K8sEvent[] = [];
+  /** 現在の tick 番号 */
   private tick = 0;
+  /** Pod ID の自動採番カウンタ */
   private nextPodId = 1;
+  /** ReplicaSet ID の自動採番カウンタ */
   private nextRsId = 1;
 
+  /**
+   * クラスタを初期化する
+   * @param nodes - ノード定義の配列 (名前、CPU容量、メモリ容量、taint)
+   */
   constructor(nodes: { name: string; cpuCapacity: number; memCapacity: number; taints?: string[] }[]) {
     for (const n of nodes) {
       this.nodes.push({
@@ -133,6 +241,7 @@ export class Cluster {
     }
   }
 
+  /** イベントログを読み取り専用で取得する */
   get eventLog(): readonly K8sEvent[] { return this.events; }
 
   /** 現在のスナップショットを返す */
@@ -193,6 +302,10 @@ export class Cluster {
 
   // ── Deployment ──
 
+  /**
+   * Deployment を適用する (作成または更新)
+   * @param d - 適用する Deployment 定義
+   */
   private applyDeployment(d: Deployment): void {
     const existing = this.deployments.find((e) => e.name === d.name);
     if (existing !== undefined) {
@@ -207,6 +320,10 @@ export class Cluster {
     this.ensureReplicaSet(d);
   }
 
+  /**
+   * Deployment に対応する ReplicaSet を確保する (存在しなければ作成)
+   * @param d - 対象の Deployment
+   */
   private ensureReplicaSet(d: Deployment): void {
     let rs = this.replicaSets.find((r) => r.name.startsWith(d.name));
     if (rs === undefined) {
@@ -226,6 +343,11 @@ export class Cluster {
     }
   }
 
+  /**
+   * Deployment のレプリカ数を変更する
+   * @param name - Deployment 名
+   * @param replicas - 新しいレプリカ数
+   */
   private scaleDeployment(name: string, replicas: number): void {
     const d = this.deployments.find((e) => e.name === name);
     if (d === undefined) return;
@@ -235,6 +357,11 @@ export class Cluster {
     this.emit("Deployment", name, "Scaled", `replicas=${replicas}`);
   }
 
+  /**
+   * Deployment のローリングリスタートを実行する
+   * 既存の全 Pod を Terminating にし、ReplicaSet が新しい Pod を再作成する
+   * @param name - Deployment 名
+   */
   private rolloutRestart(name: string): void {
     const d = this.deployments.find((e) => e.name === name);
     if (d === undefined) return;
@@ -249,6 +376,10 @@ export class Cluster {
 
   // ── Service ──
 
+  /**
+   * Service を適用する (作成または更新)
+   * @param s - 適用する Service 定義
+   */
   private applyService(s: Service): void {
     const existing = this.services.find((e) => e.name === s.name);
     if (existing !== undefined) {
@@ -262,6 +393,10 @@ export class Cluster {
 
   // ── Pod ──
 
+  /**
+   * Pod を削除する (Terminating フェーズに移行)
+   * @param name - 削除対象の Pod 名
+   */
   private deletePod(name: string): void {
     const pod = this.pods.find((p) => p.name === name);
     if (pod === undefined) return;
@@ -271,6 +406,12 @@ export class Cluster {
 
   // ── Node ──
 
+  /**
+   * ノードの cordon/uncordon を切り替える
+   * cordon するとノードに NoSchedule taint が付与され、新規 Pod がスケジュールされなくなる
+   * @param name - ノード名
+   * @param cordon - true で cordon、false で uncordon
+   */
   private cordonNode(name: string, cordon: boolean): void {
     const node = this.nodes.find((n) => n.name === name);
     if (node === undefined) return;
@@ -283,6 +424,11 @@ export class Cluster {
     }
   }
 
+  /**
+   * ノードを drain する (cordon + 全 Pod を退避)
+   * メンテナンス時にノード上の Pod を安全に別ノードへ移動させる
+   * @param name - ノード名
+   */
   private drainNode(name: string): void {
     this.cordonNode(name, true);
     const podsOnNode = this.pods.filter((p) => p.nodeName === name && p.phase === "Running");
@@ -390,6 +536,11 @@ export class Cluster {
 
   // ── ヘルパー ──
 
+  /**
+   * ReplicaSet のテンプレートから新しい Pod を生成する
+   * @param rs - Pod の生成元となる ReplicaSet
+   * @returns 生成された Pod (Pending 状態)
+   */
   private createPod(rs: ReplicaSet): Pod {
     const id = this.nextPodId++;
     const containers = rs.template.containers;
@@ -409,6 +560,13 @@ export class Cluster {
     };
   }
 
+  /**
+   * Pod のラベルがセレクタに一致するか判定する
+   * セレクタの全キーバリューが Pod のラベルに含まれていれば true
+   * @param podLabels - Pod のラベル
+   * @param selector - マッチさせるセレクタ
+   * @returns 一致すれば true
+   */
   private matchLabels(podLabels: Record<string, string>, selector: Record<string, string>): boolean {
     for (const [key, value] of Object.entries(selector)) {
       if (podLabels[key] !== value) return false;
@@ -416,6 +574,10 @@ export class Cluster {
     return true;
   }
 
+  /**
+   * Pod をノードから除去し、割り当てリソースを解放する
+   * @param pod - 除去対象の Pod
+   */
   private removePodFromNode(pod: Pod): void {
     if (pod.nodeName === null) return;
     const node = this.nodes.find((n) => n.name === pod.nodeName);
@@ -425,6 +587,13 @@ export class Cluster {
     node.memAllocated = Math.max(0, node.memAllocated - pod.totalMem);
   }
 
+  /**
+   * イベントをイベントログに追加する
+   * @param kind - リソースの種類
+   * @param name - リソース名
+   * @param reason - イベントの理由
+   * @param message - 詳細メッセージ
+   */
   private emit(kind: string, name: string, reason: string, message: string): void {
     this.events.push({ tick: this.tick, kind, name, reason, message });
   }

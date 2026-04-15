@@ -1,3 +1,17 @@
+/**
+ * スケジューラシミュレーションエンジン
+ *
+ * このモジュールはCPUスケジューリングの離散時間シミュレーションを実行する。
+ * 各tick（時間単位）ごとに以下の処理を順に実行する：
+ *   1. プロセス到着処理（レディキューへの追加）
+ *   2. I/O完了チェック（blocked → readyへの状態遷移）
+ *   3. スケジューリング判断（次に実行するプロセスの選択）
+ *   4. ディスパッチ（選択されたプロセスのCPU割り当て）
+ *   5. 実行（1tick分の進行とバースト完了・タイムスライス満了の判定）
+ *
+ * サポートするアルゴリズム：FCFS, SJF, SRTF, RR, Priority, Priority(Preemptive), MLFQ
+ */
+
 import type {
   ProcessDef,
   ProcessRuntime,
@@ -8,7 +22,12 @@ import type {
   SimulationResult,
 } from "./types.js";
 
-/** プロセスランタイムを初期化 */
+/**
+ * プロセスのランタイム状態を初期化する
+ *
+ * プロセス定義からシミュレーション用のランタイムオブジェクトを生成する。
+ * 初期状態はreadyで、最初のCPUバーストの実行を待機している。
+ */
 function initRuntime(def: ProcessDef): ProcessRuntime {
   return {
     def,

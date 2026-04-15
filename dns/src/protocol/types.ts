@@ -23,7 +23,7 @@
  *     QR(1) OPCODE(4) AA(1) TC(1) RD(1) RA(1) Z(3) RCODE(4)
  */
 
-// === レコード型 ===
+/** DNSレコード型の定数定義（RFC 1035 準拠） */
 export const RecordType = {
   A: 1,        // IPv4 アドレス
   NS: 2,       // ネームサーバ
@@ -35,7 +35,11 @@ export const RecordType = {
 } as const;
 export type RecordType = (typeof RecordType)[keyof typeof RecordType];
 
-// レコード型を文字列に変換
+/**
+ * レコード型の数値を人間が読める文字列に変換する
+ * @param type - レコード型の数値（例: 1 → "A"）
+ * @returns レコード型の文字列表現
+ */
 export function recordTypeToString(type: number): string {
   const map: Record<number, string | undefined> = {
     [RecordType.A]: "A",
@@ -49,12 +53,12 @@ export function recordTypeToString(type: number): string {
   return map[type] ?? `TYPE${String(type)}`;
 }
 
-// === レコードクラス ===
+/** DNSレコードクラスの定数定義 */
 export const RecordClass = {
   IN: 1,       // インターネット
 } as const;
 
-// === レスポンスコード ===
+/** DNSレスポンスコードの定数定義 */
 export const ResponseCode = {
   NoError: 0,
   FormatError: 1,
@@ -65,7 +69,11 @@ export const ResponseCode = {
 } as const;
 export type ResponseCode = (typeof ResponseCode)[keyof typeof ResponseCode];
 
-// === DNS ヘッダ ===
+/**
+ * DNS ヘッダ（12バイト固定長）
+ *
+ * フラグの内訳: QR(1) OPCODE(4) AA(1) TC(1) RD(1) RA(1) Z(3) RCODE(4)
+ */
 export interface DnsHeader {
   id: number;           // トランザクションID (16ビット)
   qr: 0 | 1;           // 0=クエリ, 1=レスポンス
@@ -81,16 +89,23 @@ export interface DnsHeader {
   arcount: number;      // Additional の数
 }
 
-// === Question セクション ===
-// "example.com の A レコードを教えて" という問い合わせ
+/**
+ * Question セクション
+ *
+ * "example.com の A レコードを教えて" のような問い合わせを表現する。
+ */
 export interface DnsQuestion {
   name: string;         // ドメイン名 (例: "example.com")
   type: RecordType;     // レコード型 (例: A)
   class: number;        // クラス (通常 IN=1)
 }
 
-// === Resource Record ===
-// 回答・権威・追加セクションに含まれるレコード
+/**
+ * Resource Record（リソースレコード）
+ *
+ * Answer・Authority・Additional セクションに含まれるレコード。
+ * ドメイン名とそのデータ（IPアドレスやNSなど）を保持する。
+ */
 export interface DnsRecord {
   name: string;         // ドメイン名
   type: RecordType;     // レコード型
@@ -99,7 +114,7 @@ export interface DnsRecord {
   data: string;         // レコードデータ (A なら "93.184.216.34" など)
 }
 
-// === DNS メッセージ全体 ===
+/** DNS メッセージ全体（ヘッダ + 4つのセクション） */
 export interface DnsMessage {
   header: DnsHeader;
   questions: DnsQuestion[];
@@ -110,20 +125,20 @@ export interface DnsMessage {
 
 // === ネットワークシミュレーション用の型 ===
 
-// 仮想ネットワーク上のアドレス
+/** 仮想ネットワーク上のアドレス（IP + ポート） */
 export interface NetworkAddress {
   ip: string;
   port: number;
 }
 
-// UDPパケット
+/** 仮想UDPパケット（送信元・宛先・ペイロード） */
 export interface UdpPacket {
   source: NetworkAddress;
   destination: NetworkAddress;
   data: ArrayBuffer;       // DNS メッセージのバイナリ表現
 }
 
-// ネットワークイベント（トレース用）
+/** ネットワークイベント（トレース表示用の判別共用体型） */
 export type NetworkEvent =
   | { type: "udp_send"; from: string; to: string; messageId: number; questionName: string; timestamp: number }
   | { type: "udp_recv"; from: string; to: string; messageId: number; answerCount: number; timestamp: number }
@@ -132,7 +147,7 @@ export type NetworkEvent =
   | { type: "cache_store"; name: string; recordType: string; ttl: number; timestamp: number }
   | { type: "resolve_step"; serverName: string; serverIp: string; question: string; timestamp: number };
 
-// 解決トレース全体
+/** DNS名前解決の全トレース情報（UI表示用） */
 export interface ResolveTrace {
   query: string;
   recordType: string;
@@ -143,12 +158,12 @@ export interface ResolveTrace {
   elapsedMs: number;
 }
 
-// ゾーンデータ: 1つのDNSサーバが持つレコード群
+/** ゾーンデータ: 1つのDNSサーバが管理するレコード群 */
 export interface ZoneData {
   records: DnsRecord[];
 }
 
-// サーバ設定
+/** DNSサーバの設定（名前・IP・管理ゾーン） */
 export interface DnsServerConfig {
   name: string;            // サーバの名前 (例: "a.root-servers.net")
   ip: string;              // IPアドレス

@@ -62,6 +62,7 @@ export function getElementById(root: DomNode, id: string): ElementNode | null {
 export function getElementsByTagName(root: DomNode, tagName: string): ElementNode[] {
   const results: ElementNode[] = [];
 
+  /** DOMツリーを再帰的に走査し、一致する要素を収集する */
   function walk(node: DomNode): void {
     if (node.type === 'text') return;
 
@@ -83,6 +84,7 @@ export function getElementsByTagName(root: DomNode, tagName: string): ElementNod
  * タグ名、.クラス名、#ID のシンプルなセレクタに対応
  */
 export function querySelector(root: DomNode, selector: string): ElementNode | null {
+  /** 要素がセレクタに一致するか判定する */
   function matches(node: ElementNode, sel: string): boolean {
     if (sel.startsWith('#')) {
       return node.attributes['id'] === sel.slice(1);
@@ -94,6 +96,7 @@ export function querySelector(root: DomNode, selector: string): ElementNode | nu
     return node.tagName === sel;
   }
 
+  /** DOMツリーを再帰的に走査し、最初に一致する要素を返す */
   function walk(node: DomNode): ElementNode | null {
     if (node.type === 'text') return null;
 

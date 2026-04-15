@@ -1,18 +1,33 @@
+/**
+ * app.ts — ICMP シミュレーターの UI アプリケーション
+ *
+ * ブラウザ上で ICMP シミュレーションの実験を選択・実行・可視化する。
+ * セレクトボックスでプリセット実験を切り替え、パケットトレースや
+ * 統計情報をリアルタイムに表示する。
+ */
+
 import {
   IcmpSimulator, node, routerNode, netLink,
   ICMP_TYPES, icmpTypeName,
 } from "../engine/icmp.js";
 import type { Topology, Scenario, SimResult, SimEvent, IcmpMessage } from "../engine/icmp.js";
 
+/** 実験プリセットの定義。トポロジーとシナリオのセットで構成される */
 export interface Experiment {
+  /** 実験名 (セレクトボックスに表示) */
   name: string;
+  /** 実験の説明文 */
   description: string;
+  /** シミュレーション対象のネットワークトポロジー */
   topology: Topology;
+  /** 実行するシナリオの配列 */
   scenarios: Scenario[];
 }
 
-// ── トポロジー ──
+// ── トポロジー定義 ──
+// 各実験プリセットで使用する仮想ネットワーク構成
 
+/** 基本トポロジー: client → r1 → r2 → server の直列構成 */
 const basicTopo: Topology = {
   nodes: [
     node("client", "10.0.0.10", { openPorts: [{ port: 80, proto: "tcp" }] }),
@@ -23,6 +38,7 @@ const basicTopo: Topology = {
   links: [netLink("client", "r1", 2), netLink("r1", "r2", 8), netLink("r2", "server", 2)],
 };
 
+/** MTU 検証用トポロジー: VPN トンネル (MTU=1280) を含む経路 */
 const mtuTopo: Topology = {
   nodes: [
     node("client", "10.0.0.10"),
@@ -34,6 +50,7 @@ const mtuTopo: Topology = {
   links: [netLink("client", "r1", 2), netLink("r1", "vpn-tun", 5), netLink("vpn-tun", "r2", 5, { mtu: 1280 }), netLink("r2", "server", 2)],
 };
 
+/** リダイレクト検証用トポロジー: 旧ゲートウェイが新ゲートウェイへの直接ルートを通知 */
 const redirectTopo: Topology = {
   nodes: [
     node("client", "192.168.1.10"),
@@ -44,6 +61,7 @@ const redirectTopo: Topology = {
   links: [netLink("client", "gw-old", 1), netLink("gw-old", "gw-new", 1), netLink("gw-new", "server", 5), netLink("client", "gw-new", 1)],
 };
 
+/** ファイアウォール検証用トポロジー: Echo=DROP, Timestamp=REJECT のルール付きホスト */
 const fwTopo: Topology = {
   nodes: [
     node("client", "10.0.0.10"),
@@ -53,6 +71,7 @@ const fwTopo: Topology = {
   links: [netLink("client", "r1", 2), netLink("r1", "fw-host", 3)],
 };
 
+/** ポート到達不能検証用トポロジー: UDP 53 と TCP 80 のみ開放 */
 const portUnreachTopo: Topology = {
   nodes: [
     node("client", "10.0.0.10"),
@@ -62,6 +81,7 @@ const portUnreachTopo: Topology = {
   links: [netLink("client", "r1", 2), netLink("r1", "server", 3)],
 };
 
+/** 長距離トポロジー: 5 台のルーターを経由する多ホップ経路 (TTL 検証用) */
 const longTopo: Topology = {
   nodes: [
     node("src", "10.0.0.2"),
@@ -75,6 +95,7 @@ const longTopo: Topology = {
   ],
 };
 
+/** ICMP 無効ルーター検証用トポロジー: silent ルーターは ICMP 応答を返さない */
 const silentRouterTopo: Topology = {
   nodes: [
     node("client", "10.0.0.10"),
@@ -85,6 +106,7 @@ const silentRouterTopo: Topology = {
   links: [netLink("client", "r1", 2), netLink("r1", "silent", 5), netLink("silent", "server", 3)],
 };
 
+/** パケットロス検証用トポロジー: r1→server 間で 30% のパケットロスが発生 */
 const lossyTopo: Topology = {
   nodes: [
     node("client", "10.0.0.10"),
@@ -94,6 +116,7 @@ const lossyTopo: Topology = {
   links: [netLink("client", "r1", 3), netLink("r1", "server", 10, { loss: 0.3 })],
 };
 
+/** セレクトボックスから選択可能な実験プリセット一覧 */
 export const EXPERIMENTS: Experiment[] = [
   {
     name: "Echo Request / Reply (Type 8→0)",
@@ -163,17 +186,37 @@ export const EXPERIMENTS: Experiment[] = [
   },
 ];
 
-// ── 色 ──
+// ── 表示用カラーユーティリティ ──
 
+/**
+ * レイヤー (IP/ICMP/Link/App) に応じた表示色を返す
+ * @param layer - イベントのレイヤー種別
+ * @returns CSS カラーコード
+ */
 function layerColor(layer: SimEvent["layer"]): string {
   switch (layer) { case "IP": return "#64748b"; case "ICMP": return "#3b82f6"; case "Link": return "#475569"; case "App": return "#f59e0b"; }
 }
+/**
+ * イベント方向 (tx/rx/gen/drop/info) に応じた表示色を返す
+ * @param dir - イベントの方向種別
+ * @returns CSS カラーコード
+ */
 function dirColor(dir: SimEvent["direction"]): string {
   switch (dir) { case "tx": return "#22c55e"; case "rx": return "#06b6d4"; case "gen": return "#a78bfa"; case "drop": return "#ef4444"; case "info": return "#64748b"; }
 }
+/**
+ * イベント方向に対応するアイコン文字を返す
+ * @param dir - イベントの方向種別
+ * @returns アイコン文字列
+ */
 function dirIcon(dir: SimEvent["direction"]): string {
   switch (dir) { case "tx": return "→"; case "rx": return "←"; case "gen": return "⚡"; case "drop": return "✗"; case "info": return "●"; }
 }
+/**
+ * ICMP メッセージタイプに応じたタグの表示色を返す
+ * @param type - ICMP タイプ番号
+ * @returns CSS カラーコード
+ */
 function typeTagColor(type: number): string {
   if (type === 0 || type === 8) return "#22c55e";
   if (type === 3) return "#ef4444";
@@ -183,10 +226,20 @@ function typeTagColor(type: number): string {
   return "#64748b";
 }
 
+/**
+ * ICMP シミュレーターの UI アプリケーションクラス。
+ * ヘッダー (実験選択・実行ボタン)、左パネル (設定・統計・メッセージ)、
+ * 右パネル (パケットトレース) の 3 エリアで構成される。
+ */
 export class IcmpApp {
+  /**
+   * アプリケーションを初期化し、指定コンテナに UI を構築する
+   * @param container - アプリを描画する親 HTML 要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 
+    // ヘッダー部: タイトル、実験セレクトボックス、実行ボタン、説明テキスト
     const header = document.createElement("div");
     header.style.cssText = "padding:8px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1e293b;flex-wrap:wrap;";
     const title = document.createElement("h1"); title.textContent = "ICMP Simulator"; title.style.cssText = "margin:0;font-size:15px;white-space:nowrap;";
@@ -201,9 +254,10 @@ export class IcmpApp {
     header.appendChild(descSpan);
     container.appendChild(header);
 
+    // メインコンテンツ: 左右パネルのフレックスコンテナ
     const main = document.createElement("div"); main.style.cssText = "flex:1;display:flex;overflow:hidden;";
 
-    // 左パネル
+    // 左パネル: シナリオ設定、統計情報、メッセージ詳細
     const leftPanel = document.createElement("div"); leftPanel.style.cssText = "width:370px;display:flex;flex-direction:column;border-right:1px solid #1e293b;overflow-y:auto;font-size:10px;";
     const addSection = (label: string, color: string) => {
       const lbl = document.createElement("div"); lbl.style.cssText = `padding:4px 12px;font-size:11px;font-weight:600;color:${color};border-bottom:1px solid #1e293b;`; lbl.textContent = label; leftPanel.appendChild(lbl);
@@ -216,7 +270,7 @@ export class IcmpApp {
     const msgDiv = document.createElement("div"); msgDiv.style.cssText = "flex:1;padding:4px 8px;overflow-y:auto;"; leftPanel.appendChild(msgDiv);
     main.appendChild(leftPanel);
 
-    // 右パネル
+    // 右パネル: パケットトレース (イベントログの時系列表示)
     const rightPanel = document.createElement("div"); rightPanel.style.cssText = "flex:1;display:flex;flex-direction:column;overflow:hidden;";
     const evLabel = document.createElement("div"); evLabel.style.cssText = "padding:4px 12px;font-size:11px;font-weight:600;color:#3b82f6;border-bottom:1px solid #1e293b;"; evLabel.textContent = "Packet Trace";
     rightPanel.appendChild(evLabel);
@@ -224,8 +278,10 @@ export class IcmpApp {
     main.appendChild(rightPanel);
     container.appendChild(main);
 
+    /** パネルに "ラベル: 値" 形式の行を追加するヘルパー */
     const addRow = (p: HTMLElement, l: string, v: string, c: string) => { const r = document.createElement("div"); r.style.marginBottom = "2px"; r.innerHTML = `<span style="color:${c};font-weight:600;">${l}:</span> <span style="color:#94a3b8;">${v}</span>`; p.appendChild(r); };
 
+    /** 実験のシナリオ設定を左パネルに描画する */
     const renderConfig = (exp: Experiment) => {
       cfgDiv.innerHTML = "";
       addRow(cfgDiv, "ノード数", String(exp.topology.nodes.length), "#e2e8f0");
@@ -239,6 +295,7 @@ export class IcmpApp {
       }
     };
 
+    /** シミュレーション結果の統計情報を描画する */
     const renderStats = (result: SimResult) => {
       statsDiv.innerHTML = "";
       addRow(statsDiv, "送信", String(result.stats.sent), "#e2e8f0");
@@ -249,6 +306,7 @@ export class IcmpApp {
       addRow(statsDiv, "総時間", `${result.totalTime}ms`, "#06b6d4");
     };
 
+    /** ICMP メッセージ一覧をカード形式で描画する */
     const renderMessages = (msgs: IcmpMessage[]) => {
       msgDiv.innerHTML = "";
       for (const m of msgs) {

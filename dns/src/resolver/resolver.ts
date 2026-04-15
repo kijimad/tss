@@ -21,18 +21,32 @@ import { decodeDnsMessage } from "../protocol/decoder.js";
 import type { VirtualNetwork } from "../network/virtual-network.js";
 import type { DnsCache } from "./cache.js";
 
-// ルートサーバのIPアドレス（解決の起点）
+/** ルートサーバのIPアドレス（再帰解決の起点） */
 const ROOT_SERVER_IP = "198.41.0.4";
 
+/**
+ * 再帰 DNS リゾルバ
+ *
+ * ルートサーバから順に権威サーバへ辿り、最終的なレコードを取得する。
+ * キャッシュを活用し、解決過程のトレースも記録する。
+ */
 export class DnsResolver {
+  /** 仮想ネットワーク（パケット送受信用） */
   private network: VirtualNetwork;
+  /** DNSレコードキャッシュ */
   private cache: DnsCache;
+  /** 次に使用するトランザクションID */
   private nextId = 1;
 
-  // トレース用
+  /** トレース用イベントログ */
   private events: NetworkEvent[] = [];
+  /** トレース開始時刻 */
   private traceStartTime = 0;
 
+  /**
+   * @param network - パケット送受信に使用する仮想ネットワーク
+   * @param cache - DNSレコードキャッシュ
+   */
   constructor(network: VirtualNetwork, cache: DnsCache) {
     this.network = network;
     this.cache = cache;

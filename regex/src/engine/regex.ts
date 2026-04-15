@@ -12,6 +12,22 @@
 
 // ── AST ──
 
+/**
+ * 正規表現の抽象構文木（AST）を表す共用体型。
+ * パーサーがパターン文字列を解析して生成するノードの型定義。
+ *
+ * - literal: 単一文字リテラル
+ * - dot: 任意の1文字にマッチ（.）
+ * - charClass: 文字クラス（[a-z] など）
+ * - concat: 連結（左右のノードを順番にマッチ）
+ * - alt: 選択（|）
+ * - star: 0回以上の繰り返し（*）
+ * - plus: 1回以上の繰り返し（+）
+ * - question: 0回または1回（?）
+ * - group: グループ化（()）
+ * - anchor: アンカー（^ または $）
+ * - empty: 空ノード
+ */
 export type AstNode =
   | { type: "literal"; char: string }
   | { type: "dot" }
@@ -27,6 +43,10 @@ export type AstNode =
 
 // ── NFA ──
 
+/**
+ * NFA（非決定性有限オートマトン）の個々の状態を表すインターフェース。
+ * 各状態はε遷移、文字遷移、述語遷移を持つことができる。
+ */
 export interface NfaState {
   id: number;
   label: string;
@@ -42,14 +62,25 @@ export interface NfaState {
   groupEnd?: number;
 }
 
+/**
+ * NFA全体を表すインターフェース。
+ * 状態の配列と、開始状態・受理状態のIDを保持する。
+ */
 export interface Nfa {
+  /** 全状態の配列 */
   states: NfaState[];
+  /** 開始状態のID */
   start: number;
+  /** 受理状態のID */
   accept: number;
 }
 
 // ── マッチトレース ──
 
+/**
+ * NFAシミュレーションの1ステップを表すインターフェース。
+ * シミュレーションの各段階（初期化、ε閉包計算、文字遷移、受理/拒否）を記録する。
+ */
 export interface MatchStep {
   /** 現在のアクティブ状態集合 */
   activeStates: number[];
@@ -61,21 +92,39 @@ export interface MatchStep {
   detail: string;
 }
 
+/**
+ * NFAシミュレーションの最終結果を表すインターフェース。
+ * マッチの成否、マッチしたテキスト、シミュレーションの全ステップ、訪問した状態数を保持する。
+ */
 export interface MatchResult {
+  /** マッチが成功したかどうか */
   matched: boolean;
+  /** マッチした文字列（不一致の場合は空文字列） */
   matchedText: string;
+  /** シミュレーションの全ステップ */
   steps: MatchStep[];
+  /** 訪問した状態の総数 */
   statesVisited: number;
 }
 
 // ── パーサー ──
 
+/** グループのインデックスカウンター（パース時にリセットされる） */
 let groupCounter = 0;
 
+/**
+ * 正規表現パターン文字列をパースしてASTを生成する。
+ * 再帰下降パーサーを使用し、演算子の優先順位を正しく処理する。
+ * 優先順位: 選択(|) < 連結 < 量指定子(*, +, ?)
+ *
+ * @param pattern - パースする正規表現パターン文字列
+ * @returns パースされたASTのルートノード
+ */
 export function parse(pattern: string): AstNode {
   groupCounter = 0;
   let pos = 0;
 
+  /** 選択（|）をパースする。最も低い優先順位の演算子。 */
   function parseAlt(): AstNode {
     let left = parseConcat();
     while (pos < pattern.length && pattern[pos] === "|") {
@@ -86,6 +135,7 @@ export function parse(pattern: string): AstNode {
     return left;
   }
 
+  /** 連結をパースする。アトムを左から右へ順に結合する。 */
   function parseConcat(): AstNode {
     let node: AstNode = { type: "empty" };
     while (pos < pattern.length && pattern[pos] !== ")" && pattern[pos] !== "|") {
@@ -95,6 +145,7 @@ export function parse(pattern: string): AstNode {
     return node;
   }
 
+  /** 量指定子（*, +, ?）をパースする。アトムの後に付く繰り返し演算子を処理。 */
   function parseQuantifier(): AstNode {
     let atom = parseAtom();
     if (pos < pattern.length) {
@@ -105,6 +156,7 @@ export function parse(pattern: string): AstNode {
     return atom;
   }
 
+  /** アトム（基本要素）をパースする。リテラル、グループ、文字クラス、ドット、アンカー、エスケープシーケンスを処理。 */
   function parseAtom(): AstNode {
     if (pos >= pattern.length) return { type: "empty" };
     const ch = pattern[pos]!;
@@ -140,6 +192,7 @@ export function parse(pattern: string): AstNode {
     return { type: "literal", char: ch };
   }
 
+  /** 文字クラス（[a-z]、[^0-9] など）をパースする。範囲指定（a-z）と否定（^）に対応。 */
   function parseCharClass(): AstNode {
     pos++; // skip [
     let negated = false;
@@ -165,18 +218,38 @@ export function parse(pattern: string): AstNode {
 
 // ── Thompson's NFA 構築 ──
 
+/** NFA状態のIDカウンター（NFA構築時にリセットされる） */
 let stateCounter = 0;
 
+/**
+ * 新しいNFA状態を生成する。
+ * @param label - 状態の表示ラベル（デバッグ・可視化用）
+ * @returns 新しいNfaStateオブジェクト
+ */
 function newState(label: string): NfaState {
   return { id: stateCounter++, label, epsilon: [], transitions: new Map() };
 }
 
+/**
+ * ASTからThompsonの構成法を用いてNFAを構築する。
+ * 各ASTノードをNFAフラグメントに変換し、それらを結合して完全なNFAを生成する。
+ *
+ * @param ast - 変換対象のASTルートノード
+ * @returns 構築されたNFA
+ */
 export function buildNfa(ast: AstNode): Nfa {
   stateCounter = 0;
   const { start, accept, states } = buildFragment(ast);
   return { states, start: start.id, accept: accept.id };
 }
 
+/**
+ * 単一のASTノードからNFAフラグメント（開始状態、受理状態、全状態の配列）を構築する。
+ * Thompsonの構成法に基づき、各ノードタイプに応じたNFA構造を再帰的に生成する。
+ *
+ * @param node - 変換対象のASTノード
+ * @returns 開始状態、受理状態、全状態を含むNFAフラグメント
+ */
 function buildFragment(node: AstNode): { start: NfaState; accept: NfaState; states: NfaState[] } {
   switch (node.type) {
     case "empty": {
@@ -261,6 +334,13 @@ function buildFragment(node: AstNode): { start: NfaState; accept: NfaState; stat
   }
 }
 
+/**
+ * 文字配列を表示用に要約する。
+ * 6文字以下ならそのまま結合し、それ以上なら先頭2文字と末尾1文字で省略表記にする。
+ *
+ * @param chars - 要約対象の文字配列
+ * @returns 要約された文字列
+ */
 function summarizeChars(chars: string[]): string {
   if (chars.length <= 6) return chars.join("");
   return `${chars[0]}${chars[1]}...${chars[chars.length - 1]}`;
@@ -268,11 +348,26 @@ function summarizeChars(chars: string[]): string {
 
 // ── NFA シミュレーション (ε-closure ベース) ──
 
+/**
+ * NFAを使って入力文字列のマッチングをシミュレーションする。
+ * ε閉包ベースのNFAシミュレーションアルゴリズムを使用し、
+ * 各ステップのトレース情報を記録しながら実行する。
+ *
+ * @param nfa - シミュレーション対象のNFA
+ * @param input - マッチング対象の入力文字列
+ * @returns マッチ結果（成否、ステップトレース、訪問状態数を含む）
+ */
 export function simulateNfa(nfa: Nfa, input: string): MatchResult {
   const steps: MatchStep[] = [];
   let statesVisited = 0;
 
-  // ε-closure を計算する
+  /**
+   * 与えられた状態集合のε閉包を計算する。
+   * スタックベースの探索で、ε遷移で到達可能な全状態を収集する。
+   *
+   * @param stateIds - 起点となる状態IDの集合
+   * @returns ε閉包（ε遷移で到達可能な全状態のID集合）
+   */
   function epsilonClosure(stateIds: Set<number>): Set<number> {
     const stack = [...stateIds];
     const closure = new Set(stateIds);
@@ -373,6 +468,14 @@ export function simulateNfa(nfa: Nfa, input: string): MatchResult {
 
 // ── AST を文字列に変換 (デバッグ用) ──
 
+/**
+ * ASTをインデント付きの文字列表現に変換する（デバッグ・可視化用）。
+ * 再帰的にノードを走査し、ツリー構造を読みやすい文字列にフォーマットする。
+ *
+ * @param node - 文字列化するASTノード
+ * @param depth - 現在のインデント深さ（デフォルト: 0）
+ * @returns ASTのインデント付き文字列表現
+ */
 export function astToString(node: AstNode, depth = 0): string {
   const indent = "  ".repeat(depth);
   switch (node.type) {

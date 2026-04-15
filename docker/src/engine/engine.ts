@@ -21,7 +21,10 @@ import {
   type BuildEvent,
 } from "../image/image.js";
 
-// コンテナの状態
+/**
+ * コンテナのライフサイクル状態を表す定数オブジェクト。
+ * created → running → paused/stopped → removed の遷移をとる。
+ */
 export const ContainerState = {
   Created: "created",
   Running: "running",
@@ -31,7 +34,11 @@ export const ContainerState = {
 } as const;
 export type ContainerState = (typeof ContainerState)[keyof typeof ContainerState];
 
-// コンテナ
+/**
+ * コンテナの全情報を保持するインターフェース。
+ * 名前空間（namespace）による隔離、ファイルシステム、ネットワーク、
+ * cgroup によるリソース制限、実行状態を含む。
+ */
 export interface Container {
   id: string;
   name: string;
@@ -59,7 +66,11 @@ export interface Container {
   startedAt: number | undefined;
 }
 
-// Docker エンジンイベント
+/**
+ * Docker エンジンが発行するイベントのユニオン型。
+ * イメージ操作、コンテナ操作、名前空間・cgroup・ネットワーク設定など
+ * エンジン内部の各操作に対応するイベントを定義する。
+ */
 export type EngineEvent =
   | { type: "image_pull"; name: string }
   | { type: "image_build"; name: string; layers: number }
@@ -75,18 +86,32 @@ export type EngineEvent =
   | { type: "layer_mount"; id: string; layers: number; mode: string }
   | { type: "stdout"; id: string; text: string };
 
+/** コンテナID生成用のカウンター */
 let nextContainerId = 1;
-let nextIp = 2;  // 172.17.0.2 から
+/** IPアドレス割り当て用のカウンター（172.17.0.2 から開始） */
+let nextIp = 2;
 
+/**
+ * Docker エンジンのシミュレータークラス。
+ * イメージの管理、コンテナのライフサイクル管理、コマンド実行を
+ * すべてメモリ上でエミュレートする。
+ */
 export class DockerEngine {
   private images = new Map<string, DockerImage>();
   private containers = new Map<string, Container>();
   events: EngineEvent[] = [];
   onEvent: ((event: EngineEvent) => void) | undefined;
 
+  /** イベントを記録し、リスナーに通知する */
   private emit(event: EngineEvent): void { this.events.push(event); this.onEvent?.(event); }
 
-  // === docker pull ===
+  /**
+   * イメージをレジストリから取得する（docker pull に相当）。
+   * 既にローカルに存在する場合はキャッシュを返す。
+   * @param name - イメージ名
+   * @param tag - イメージタグ（デフォルト: "latest"）
+   * @returns 取得した DockerImage オブジェクト
+   */
   pull(name: string, tag = "latest"): DockerImage {
     const key = `${name}:${tag}`;
     if (this.images.has(key)) return this.images.get(key)!;
@@ -96,7 +121,14 @@ export class DockerEngine {
     return image;
   }
 
-  // === docker build ===
+  /**
+   * Dockerfile からイメージをビルドする（docker build に相当）。
+   * @param dockerfileContent - Dockerfile のテキスト内容
+   * @param context - ビルドコンテキスト（COPY 用のファイルマップ）
+   * @param name - 生成するイメージの名前
+   * @param tag - 生成するイメージのタグ（デフォルト: "latest"）
+   * @returns ビルドされたイメージとビルドイベント
+   */
   build(dockerfileContent: string, context: Map<string, string>, name: string, tag = "latest"): { image: DockerImage; buildEvents: BuildEvent[] } {
     const instructions = parseDockerfile(dockerfileContent);
     const { image, events: buildEvents } = buildImage(instructions, context, name, tag);
@@ -105,7 +137,14 @@ export class DockerEngine {
     return { image, buildEvents };
   }
 
-  // === docker create / run ===
+  /**
+   * コンテナを作成して起動する（docker run に相当）。
+   * 名前空間の作成、cgroup の設定、ネットワーク接続、レイヤーマウントを行い、
+   * CMD で指定されたコマンドを実行する。
+   * @param imageName - 使用するイメージ名（"name:tag" 形式も可）
+   * @param options - コンテナ作成オプション（名前、コマンド、環境変数、ポート、リソース制限）
+   * @returns 作成されたコンテナオブジェクト
+   */
   run(imageName: string, options: {
     name?: string;
     cmd?: string[];
@@ -173,7 +212,11 @@ export class DockerEngine {
     return container;
   }
 
-  // === docker start ===
+  /**
+   * 停止中のコンテナを起動する（docker start に相当）。
+   * コンテナの状態を Running に変更し、CMD コマンドを実行する。
+   * @param id - コンテナID
+   */
   start(id: string): void {
     const c = this.containers.get(id);
     if (c === undefined || c.state === ContainerState.Running) return;
@@ -185,7 +228,10 @@ export class DockerEngine {
     this.executeInContainer(c, c.cmd.join(" "));
   }
 
-  // === docker stop ===
+  /**
+   * 実行中のコンテナを停止する（docker stop に相当）。
+   * @param id - コンテナID
+   */
   stop(id: string): void {
     const c = this.containers.get(id);
     if (c === undefined || c.state !== ContainerState.Running) return;
@@ -193,7 +239,11 @@ export class DockerEngine {
     this.emit({ type: "container_stop", id, name: c.name });
   }
 
-  // === docker rm ===
+  /**
+   * コンテナを削除する（docker rm に相当）。
+   * 実行中の場合は先に停止してから削除する。
+   * @param id - コンテナID
+   */
   rm(id: string): void {
     const c = this.containers.get(id);
     if (c === undefined) return;
@@ -203,14 +253,26 @@ export class DockerEngine {
     this.emit({ type: "container_rm", id, name: c.name });
   }
 
-  // === docker exec ===
+  /**
+   * 実行中のコンテナ内でコマンドを実行する（docker exec に相当）。
+   * @param id - コンテナID
+   * @param command - 実行するコマンド文字列
+   * @returns コマンドの出力
+   */
   exec(id: string, command: string): string {
     const c = this.containers.get(id);
     if (c === undefined || c.state !== ContainerState.Running) return "Error: container not running";
     return this.executeInContainer(c, command);
   }
 
-  // コンテナ内でコマンドを実行
+  /**
+   * コンテナ内でコマンドをシミュレート実行する。
+   * echo, cat, ls, pwd, hostname, env, whoami, ps, ip などの基本コマンドをサポート。
+   * 実行結果は stdout に蓄積され、メモリ使用量も更新される。
+   * @param container - 実行対象のコンテナ
+   * @param command - 実行するコマンド文字列
+   * @returns コマンドの出力テキスト
+   */
   private executeInContainer(container: Container, command: string): string {
     const fs = this.getContainerFs(container);
     let output = "";
@@ -265,13 +327,22 @@ export class DockerEngine {
     return output;
   }
 
-  // コンテナの統合 FS を取得
+  /**
+   * コンテナの統合ファイルシステムを取得する。
+   * 読み取り専用レイヤーと書き込みレイヤーを UnionFS で結合する。
+   * @param container - 対象のコンテナ
+   * @returns 統合されたファイルシステム（パス→内容のマップ）
+   */
   getContainerFs(container: Container): Map<string, string> {
     const allLayers = [...container.readonlyLayers, container.writableLayer];
     return resolveUnionFs(allLayers);
   }
 
-  // === docker ps ===
+  /**
+   * コンテナ一覧を取得する（docker ps に相当）。
+   * @param all - true の場合、停止中のコンテナも含める
+   * @returns コンテナの配列
+   */
   ps(all = false): Container[] {
     const result: Container[] = [];
     for (const c of this.containers.values()) {
@@ -280,14 +351,23 @@ export class DockerEngine {
     return result;
   }
 
-  // === docker images ===
+  /**
+   * ローカルに保存されたイメージ一覧を取得する（docker images に相当）。
+   * @returns DockerImage の配列
+   */
   listImages(): DockerImage[] {
     return [...this.images.values()];
   }
 
+  /**
+   * IDでコンテナを取得する。
+   * @param id - コンテナID
+   * @returns コンテナオブジェクト、存在しない場合は undefined
+   */
   getContainer(id: string): Container | undefined {
     return this.containers.get(id);
   }
 
+  /** イベント履歴をクリアする */
   resetEvents(): void { this.events = []; }
 }

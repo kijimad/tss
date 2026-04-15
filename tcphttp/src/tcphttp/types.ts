@@ -1,3 +1,10 @@
+/**
+ * @module types
+ * TCP/HTTPシミュレーションで使用する型定義モジュール。
+ * TCPソケット、セグメント、HTTP リクエスト/レスポンス、
+ * シミュレーション操作・イベント・結果、およびプリセットの型を提供する。
+ */
+
 /** TCPソケット状態 */
 export type TcpState =
   | "CLOSED" | "LISTEN" | "SYN_SENT" | "SYN_RECEIVED"

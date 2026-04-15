@@ -1,8 +1,39 @@
 /**
  * dhcp.ts — DHCP サーバーエミュレーションエンジン
  *
- * DHCP の DORA (Discover→Offer→Request→Ack) プロセス、
- * リース管理、アドレスプール、リレーエージェントをシミュレーションする。
+ * DHCP (Dynamic Host Configuration Protocol) は、ネットワーク上のデバイスに
+ * IP アドレスやネットワーク設定情報を自動的に割り当てるプロトコルである (RFC 2131)。
+ * クライアントはまだ IP アドレスを持たないため、ブロードキャスト (UDP ポート 67/68) を
+ * 使用してサーバーと通信する。
+ *
+ * ■ DORA プロセス (4ステップのハンドシェイク):
+ *   1. Discover — クライアントが「IP アドレスが欲しい」とブロードキャスト送信
+ *   2. Offer    — サーバーが利用可能な IP アドレスを提案
+ *   3. Request  — クライアントが提案された IP を正式に要求 (ブロードキャスト)
+ *   4. Acknowledge — サーバーが IP 割り当てを確定、リースが成立
+ *
+ * ■ リース管理:
+ *   - リース期間 (Lease Time): IP アドレスの有効期限
+ *   - T1 (更新タイマー): リース期間の 50% 経過で unicast による更新を試行
+ *   - T2 (再バインドタイマー): リース期間の 87.5% 経過で broadcast による再バインドを試行
+ *   - 期限切れ: T2 でも応答がなければリースは失効し、IP はプールに返却される
+ *
+ * ■ DHCP オプション (RFC 2132):
+ *   - Option 1: サブネットマスク
+ *   - Option 3: デフォルトゲートウェイ (ルーター)
+ *   - Option 6: DNS サーバーアドレス
+ *   - Option 15: ドメイン名
+ *   - Option 50: 要求 IP アドレス (クライアントが希望する IP)
+ *   - Option 51: リース期間
+ *   - Option 53: メッセージタイプ (DORA 等の識別)
+ *   - Option 54: サーバー識別子
+ *   - Option 58: T1 (更新時間)
+ *   - Option 59: T2 (再バインド時間)
+ *
+ * ■ リレーエージェント:
+ *   クライアントとサーバーが異なるサブネットにいる場合、
+ *   リレーエージェントが DHCP パケットを中継する。giaddr フィールドに
+ *   リレーの IP を設定し、hops をインクリメントする。
  *
  * パイプライン:
  *   クライアント起動 → DHCPDISCOVER (broadcast) →
@@ -11,14 +42,27 @@
  */
 
 // ── 基本型 ──
+// DHCP プロトコルで使用される基本的なデータ型を定義する。
 
-/** MAC アドレス (文字列表現) */
+/** MAC アドレス (文字列表現、例: "aa:bb:cc:dd:ee:ff")。Ethernet フレームのハードウェアアドレス。 */
 export type MacAddress = string;
 
-/** IPv4 アドレス (文字列表現) */
+/** IPv4 アドレス (ドット区切り10進表記、例: "192.168.1.1") */
 export type IPv4 = string;
 
-/** DHCP メッセージタイプ */
+/**
+ * DHCP メッセージタイプ (RFC 2131 Section 3.1 / Option 53)。
+ * DORA の各ステップおよび異常系・管理系メッセージを表す。
+ *
+ * - DHCPDISCOVER: クライアントが IP アドレスを発見するためのブロードキャスト
+ * - DHCPOFFER:    サーバーが IP アドレスを提案する応答
+ * - DHCPREQUEST:  クライアントが提案を受諾し正式に要求
+ * - DHCPACK:      サーバーが要求を承認し割り当てを確定
+ * - DHCPNAK:      サーバーが要求を拒否 (IP 不一致、プール枯渇等)
+ * - DHCPDECLINE:  クライアントが IP 競合を検出し割り当てを辞退
+ * - DHCPRELEASE:  クライアントが IP を自発的に解放
+ * - DHCPINFORM:   IP は持っているが追加設定情報のみ要求
+ */
 export type DhcpMessageType =
   | "DHCPDISCOVER"
   | "DHCPOFFER"
@@ -29,16 +73,28 @@ export type DhcpMessageType =
   | "DHCPRELEASE"
   | "DHCPINFORM";
 
-/** DHCP オプション */
+/**
+ * DHCP オプション (RFC 2132)。
+ * DHCP パケット内に付加される可変長のオプションフィールド。
+ * サブネットマスク、ゲートウェイ、DNS サーバーなどのネットワーク設定を伝達する。
+ */
 export interface DhcpOption {
+  /** オプションコード (例: 1=サブネットマスク, 3=ルーター, 6=DNS, 53=メッセージタイプ) */
   code: number;
+  /** オプション名 (人間が読みやすい表示用) */
   name: string;
+  /** オプション値 (文字列として格納) */
   value: string;
 }
 
-/** DHCP パケット */
+/**
+ * DHCP パケット構造 (RFC 2131 Section 2)。
+ * BOOTP (Bootstrap Protocol) を拡張した形式で、クライアント←→サーバー間の
+ * メッセージ全体を表す。実際の DHCP パケットは UDP 上で送受信され、
+ * クライアント→サーバーはポート 67、サーバー→クライアントはポート 68 を使用する。
+ */
 export interface DhcpPacket {
-  /** メッセージタイプ */
+  /** 操作コード: クライアントからのリクエスト (BOOTREQUEST=1) またはサーバーからの応答 (BOOTREPLY=2) */
   op: "BOOTREQUEST" | "BOOTREPLY";
   /** ハードウェアタイプ (1 = Ethernet) */
   htype: number;
@@ -68,10 +124,29 @@ export interface DhcpPacket {
   messageType: DhcpMessageType;
 }
 
-/** リース状態 */
+/**
+ * リース状態の遷移を表す。
+ * DHCP リースのライフサイクル:
+ *   offered → bound → renewing → bound (更新成功)
+ *                   → rebinding → bound (再バインド成功)
+ *                   → expired (更新失敗)
+ *   bound → released (クライアントが自発的に解放)
+ *
+ * - offered:   サーバーが OFFER を送信したが、まだ確定していない仮状態
+ * - bound:     ACK を受信し IP が正式に割り当てられた状態
+ * - renewing:  T1 タイマー満了後、unicast でリース更新を試行中
+ * - rebinding: T2 タイマー満了後、broadcast で再バインドを試行中
+ * - expired:   リース期間が満了し IP がプールに返却された状態
+ * - released:  クライアントが RELEASE メッセージで自発的に IP を返却した状態
+ */
 export type LeaseState = "offered" | "bound" | "renewing" | "rebinding" | "expired" | "released";
 
-/** DHCP リース */
+/**
+ * DHCP リース情報。
+ * サーバーがクライアントに IP アドレスを「貸し出す」契約のメタデータ。
+ * リース期間中はクライアントがその IP を独占的に使用でき、
+ * 期限前に更新しなければ IP はプールに返却される。
+ */
 export interface Lease {
   ip: IPv4;
   mac: MacAddress;
@@ -89,7 +164,12 @@ export interface Lease {
   expiresAt: number;
 }
 
-/** アドレスプール */
+/**
+ * DHCP アドレスプール設定。
+ * サーバーが管理する IP アドレスの範囲とネットワーク設定を定義する。
+ * プールにはダイナミック割り当て範囲 (rangeStart〜rangeEnd) と
+ * MAC アドレスベースの静的予約 (reservations) がある。
+ */
 export interface AddressPool {
   /** サブネット */
   subnet: IPv4;
@@ -113,7 +193,12 @@ export interface AddressPool {
   reservations: Map<MacAddress, IPv4>;
 }
 
-/** ネットワークインターフェース (エミュレーション) */
+/**
+ * ネットワークインターフェース (エミュレーション)。
+ * DHCP クライアントとなるデバイスのネットワーク設定を表す。
+ * 初期状態では IP は "0.0.0.0" (未取得) であり、DORA プロセスを経て
+ * サーバーから IP アドレスを取得する。
+ */
 export interface NetworkInterface {
   mac: MacAddress;
   hostname: string;
@@ -123,7 +208,13 @@ export interface NetworkInterface {
   requestedIp?: IPv4;
 }
 
-/** リレーエージェント設定 */
+/**
+ * DHCP リレーエージェント設定 (RFC 1542)。
+ * クライアントとサーバーが異なるサブネットにいる場合、ブロードキャストは
+ * ルーターを越えられないため、リレーエージェントが DHCP パケットを中継する。
+ * リレーエージェントはパケットの giaddr フィールドに自身の IP を設定し、
+ * hops をインクリメントしてサーバーに転送する。
+ */
 export interface RelayAgent {
   /** リレーの IP */
   ip: IPv4;
@@ -133,7 +224,12 @@ export interface RelayAgent {
   latency: number;
 }
 
-/** シミュレーションイベント */
+/**
+ * シミュレーションイベント。
+ * DHCP シミュレーション中に発生した各種イベントを記録する。
+ * パケット送受信、リース操作、プール変更、エラー、リレー中継、
+ * タイマー満了などの種別がある。UI のイベントログやシーケンス図の描画に使用される。
+ */
 export interface SimEvent {
   time: number;
   type: "packet" | "lease" | "pool" | "error" | "relay" | "timer";
@@ -143,7 +239,12 @@ export interface SimEvent {
   clientMac?: MacAddress;
 }
 
-/** シミュレーション設定 */
+/**
+ * シミュレーション設定。
+ * DHCP シミュレーションの実行パラメータを定義する。
+ * アドレスプール、クライアント一覧、リレーエージェント、
+ * ネットワーク遅延、各種シナリオ (更新・解放・拒否・不正サーバー) を設定できる。
+ */
 export interface SimConfig {
   /** サーバー設定 */
   pool: AddressPool;
@@ -165,7 +266,11 @@ export interface SimConfig {
   rogueServer: boolean;
 }
 
-/** シミュレーション結果 */
+/**
+ * シミュレーション結果。
+ * 実行完了後のイベントログ、リース一覧、プール使用状況、
+ * クライアントごとの最終 IP マッピングを保持する。
+ */
 export interface SimResult {
   events: SimEvent[];
   leases: Lease[];
@@ -177,19 +282,22 @@ export interface SimResult {
 }
 
 // ── IP アドレスユーティリティ ──
+// IPv4 アドレスの操作・判定に使用するヘルパー関数群。
+// IP アドレスの比較やプール内の空き検索を効率的に行うため、
+// ドット区切り文字列 ↔ 32bit 符号なし整数の相互変換を提供する。
 
-/** IPv4 を 32bit 整数に変換する */
+/** IPv4 を 32bit 符号なし整数に変換する (例: "192.168.1.1" → 0xC0A80101) */
 export function ipToInt(ip: IPv4): number {
   const parts = ip.split(".");
   return ((parseInt(parts[0]!) << 24) | (parseInt(parts[1]!) << 16) | (parseInt(parts[2]!) << 8) | parseInt(parts[3]!)) >>> 0;
 }
 
-/** 32bit 整数を IPv4 に変換する */
+/** 32bit 符号なし整数を IPv4 ドット区切り文字列に変換する (例: 0xC0A80101 → "192.168.1.1") */
 export function intToIp(n: number): IPv4 {
   return `${(n >>> 24) & 0xff}.${(n >>> 16) & 0xff}.${(n >>> 8) & 0xff}.${n & 0xff}`;
 }
 
-/** サブネットに属するか判定する */
+/** 指定 IP がサブネットに属するか判定する (ビットマスク AND で比較) */
 export function isInSubnet(ip: IPv4, subnet: IPv4, mask: IPv4): boolean {
   return (ipToInt(ip) & ipToInt(mask)) === (ipToInt(subnet) & ipToInt(mask));
 }
@@ -199,25 +307,40 @@ export function rangeSize(start: IPv4, end: IPv4): number {
   return ipToInt(end) - ipToInt(start) + 1;
 }
 
-/** ランダム MAC アドレスを生成する */
+/**
+ * ランダム MAC アドレスを生成する。
+ * 先頭オクテットを 02 にすることでローカル管理アドレス (LAA) であることを示す。
+ * LAA は仮想マシンやエミュレーション環境で衝突を避けるために使われる。
+ */
 export function randomMac(): MacAddress {
   const hex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0");
   return `02:${hex()}:${hex()}:${hex()}:${hex()}:${hex()}`;
 }
 
-/** ランダムなトランザクション ID を生成する */
+/**
+ * ランダムなトランザクション ID (xid) を生成する。
+ * xid は DHCP メッセージの対応付けに使用される 32bit の値で、
+ * クライアントが DISCOVER 時に生成し、対応する OFFER/ACK で同じ値が返される。
+ */
 export function randomXid(): number {
   return Math.floor(Math.random() * 0xffffffff);
 }
 
 // ── パケット生成 ──
+// DORA プロセスおよび各種 DHCP メッセージのパケットを構築する関数群。
+// 各関数は RFC 2131 に準拠したフィールド値を設定する。
 
-/** DHCP オプションを作成する */
+/** DHCP オプションエントリを作成するヘルパー関数 */
 function opt(code: number, name: string, value: string): DhcpOption {
   return { code, name, value };
 }
 
-/** DHCPDISCOVER パケットを生成する */
+/**
+ * DHCPDISCOVER パケットを生成する (DORA ステップ 1)。
+ * クライアントが IP アドレスを持たない状態でブロードキャスト送信する最初のメッセージ。
+ * flags=0x8000 はブロードキャスト応答を要求するフラグ。
+ * Option 55 (Parameter Request List) で必要なオプションコードをサーバーに通知する。
+ */
 export function createDiscover(client: NetworkInterface, xid: number, requestedIp?: IPv4): DhcpPacket {
   const options: DhcpOption[] = [
     opt(53, "DHCP Message Type", "DHCPDISCOVER"),
@@ -235,7 +358,12 @@ export function createDiscover(client: NetworkInterface, xid: number, requestedI
   };
 }
 
-/** DHCPOFFER パケットを生成する */
+/**
+ * DHCPOFFER パケットを生成する (DORA ステップ 2)。
+ * サーバーが DISCOVER に対して「この IP を使えます」と提案する応答。
+ * yiaddr に提案 IP、siaddr にサーバー IP を設定し、
+ * サブネットマスク、ゲートウェイ、DNS、リース期間、T1/T2 を含むオプションを付加する。
+ */
 export function createOffer(
   xid: number, offeredIp: IPv4, serverIp: IPv4, clientMac: MacAddress,
   pool: AddressPool, leaseDuration: number,
@@ -259,7 +387,13 @@ export function createOffer(
   };
 }
 
-/** DHCPREQUEST パケットを生成する */
+/**
+ * DHCPREQUEST パケットを生成する (DORA ステップ 3)。
+ * クライアントが OFFER で提案された IP を正式に要求するメッセージ。
+ * ブロードキャストで送信することで、選ばれなかった他のサーバーにも通知する。
+ * Option 50 (Requested IP) と Option 54 (Server Identifier) で
+ * 受諾するサーバーと IP を明示する。
+ */
 export function createRequest(
   client: NetworkInterface, xid: number, requestedIp: IPv4, serverIp: IPv4,
 ): DhcpPacket {
@@ -278,7 +412,12 @@ export function createRequest(
   };
 }
 
-/** DHCPACK パケットを生成する */
+/**
+ * DHCPACK パケットを生成する (DORA ステップ 4)。
+ * サーバーが REQUEST を承認し IP 割り当てを確定する最終応答。
+ * このパケットをクライアントが受信した時点でリースが正式に成立する。
+ * OFFER と同様のネットワーク設定オプションが含まれる。
+ */
 export function createAck(
   xid: number, assignedIp: IPv4, serverIp: IPv4, clientMac: MacAddress,
   pool: AddressPool, leaseDuration: number,
@@ -302,7 +441,12 @@ export function createAck(
   };
 }
 
-/** DHCPNAK パケットを生成する */
+/**
+ * DHCPNAK パケットを生成する。
+ * サーバーがクライアントの REQUEST を拒否する場合に送信する。
+ * 例: 要求 IP がリースと不一致、プール枯渇、ネットワーク変更など。
+ * Option 56 (Message) に拒否理由を格納する。
+ */
 export function createNak(xid: number, serverIp: IPv4, clientMac: MacAddress, reason: string): DhcpPacket {
   return {
     op: "BOOTREPLY", htype: 1, hlen: 6, hops: 0, xid, secs: 0, flags: 0x8000,
@@ -317,7 +461,12 @@ export function createNak(xid: number, serverIp: IPv4, clientMac: MacAddress, re
   };
 }
 
-/** DHCPRELEASE パケットを生成する */
+/**
+ * DHCPRELEASE パケットを生成する。
+ * クライアントが IP アドレスを自発的に返却する際に unicast で送信する。
+ * シャットダウン時やネットワーク切断時に使用される。
+ * ciaddr に現在使用中の IP を設定する (flags=0: ブロードキャスト不要)。
+ */
 export function createRelease(client: NetworkInterface, xid: number, serverIp: IPv4): DhcpPacket {
   return {
     op: "BOOTREQUEST", htype: 1, hlen: 6, hops: 0, xid, secs: 0, flags: 0,
@@ -332,7 +481,12 @@ export function createRelease(client: NetworkInterface, xid: number, serverIp: I
   };
 }
 
-/** DHCPDECLINE パケットを生成する */
+/**
+ * DHCPDECLINE パケットを生成する。
+ * クライアントが ACK 受信後に ARP probe で IP 競合を検出した場合に送信する。
+ * サーバーは該当 IP を一時的に使用不可 (declined) としてマークし、
+ * クライアントは新しい DISCOVER から DORA プロセスを再開する。
+ */
 export function createDecline(client: NetworkInterface, xid: number, serverIp: IPv4, declinedIp: IPv4): DhcpPacket {
   return {
     op: "BOOTREQUEST", htype: 1, hlen: 6, hops: 0, xid, secs: 0, flags: 0,
@@ -349,31 +503,48 @@ export function createDecline(client: NetworkInterface, xid: number, serverIp: I
 
 // ── DHCP サーバー ──
 
+/**
+ * DHCP サーバーのエミュレーション実装。
+ * アドレスプールの管理、リースの作成・更新・解放・期限切れ処理、
+ * 各種 DHCP メッセージ (DISCOVER/REQUEST/RELEASE/DECLINE/RENEW) の応答を行う。
+ * 実際のネットワーク通信は行わず、パケットオブジェクトの生成と状態管理のみを担当する。
+ */
 export class DhcpServer {
+  /** このサーバーが管理するアドレスプール設定 */
   private pool: AddressPool;
+  /** サーバー自身の IP アドレス (Option 54 のサーバー識別子として使用) */
   private serverIp: IPv4;
+  /** MAC アドレスをキーとするリース情報のマップ */
   private leases: Map<MacAddress, Lease> = new Map();
-  /** Decline された IP (一時的に使用不可) */
+  /** DECLINE された IP アドレスの集合 (一時的に割り当て不可) */
   private declinedIps: Set<IPv4> = new Set();
-  /** 割り当て済み IP */
+  /** 現在割り当て済み (offered または bound) の IP アドレスの集合 */
   private allocatedIps: Set<IPv4> = new Set();
 
+  /** アドレスプールとサーバー IP を指定してサーバーインスタンスを作成する */
   constructor(pool: AddressPool, serverIp: IPv4) {
     this.pool = pool;
     this.serverIp = serverIp;
   }
 
-  /** 利用可能な IP を割り当てる */
+  /**
+   * 指定 MAC アドレスに利用可能な IP を割り当てる。
+   * 割り当て優先順位:
+   *   1. 予約アドレス (reservations): MAC に紐づく固定 IP があればそれを返す
+   *   2. 既存リース: 以前の割り当てがあり DECLINE されていなければ再利用
+   *   3. プールからの新規割り当て: rangeStart〜rangeEnd の範囲で空きを順次検索
+   * プール枯渇時は undefined を返す。
+   */
   allocateIp(mac: MacAddress): IPv4 | undefined {
-    // 予約チェック
+    // 予約アドレスがあれば最優先で返す (サーバーやプリンタの固定 IP 用)
     const reserved = this.pool.reservations.get(mac);
     if (reserved) return reserved;
 
-    // 以前のリースがあればそれを再利用
+    // 以前のリースがあればそれを再利用 (同一クライアントの再接続時)
     const existing = this.leases.get(mac);
     if (existing && !this.declinedIps.has(existing.ip)) return existing.ip;
 
-    // プールから空きを探す
+    // プールの割り当て範囲から空き IP を線形探索する
     const start = ipToInt(this.pool.rangeStart);
     const end = ipToInt(this.pool.rangeEnd);
     for (let i = start; i <= end; i++) {
@@ -385,7 +556,11 @@ export class DhcpServer {
     return undefined;
   }
 
-  /** DISCOVER を処理して OFFER を返す */
+  /**
+   * DHCPDISCOVER を処理して DHCPOFFER (または NAK) を返す。
+   * IP の割り当てを試み、成功すれば "offered" 状態の仮リースを作成する。
+   * プール枯渇時は NAK を返す。
+   */
   handleDiscover(packet: DhcpPacket, time: number): { offer: DhcpPacket; ip: IPv4 } | { nak: DhcpPacket } {
     const ip = this.allocateIp(packet.chaddr);
     if (!ip) {
@@ -405,7 +580,11 @@ export class DhcpServer {
     return { offer: createOffer(packet.xid, ip, this.serverIp, packet.chaddr, this.pool, leaseDuration), ip };
   }
 
-  /** REQUEST を処理して ACK/NAK を返す */
+  /**
+   * DHCPREQUEST を処理して DHCPACK または DHCPNAK を返す。
+   * Option 50 (Requested IP) がサーバーの OFFER と一致すれば ACK を返しリースを確定 ("bound") する。
+   * 不一致の場合は NAK を返す。
+   */
   handleRequest(packet: DhcpPacket, time: number): { ack: DhcpPacket } | { nak: DhcpPacket } {
     const requestedIp = packet.options.find((o) => o.code === 50)?.value;
     const lease = this.leases.get(packet.chaddr);
@@ -422,7 +601,11 @@ export class DhcpServer {
     return { ack: createAck(packet.xid, lease.ip, this.serverIp, packet.chaddr, this.pool, lease.duration) };
   }
 
-  /** RELEASE を処理する */
+  /**
+   * DHCPRELEASE を処理する。
+   * リースを "released" 状態に遷移させ、IP をプールに返却 (allocatedIps から削除) する。
+   * クライアントのシャットダウンやネットワーク切断時に呼ばれる。
+   */
   handleRelease(packet: DhcpPacket): void {
     const lease = this.leases.get(packet.chaddr);
     if (lease) {
@@ -431,7 +614,12 @@ export class DhcpServer {
     }
   }
 
-  /** DECLINE を処理する (IP を使用不可にする) */
+  /**
+   * DHCPDECLINE を処理する。
+   * クライアントが ARP probe で IP 競合を検出した場合に呼ばれる。
+   * 該当 IP を declinedIps に追加して一時的に使用不可にし、
+   * リースを削除してクライアントが再度 DISCOVER から始められるようにする。
+   */
   handleDecline(packet: DhcpPacket): void {
     const declinedIp = packet.options.find((o) => o.code === 50)?.value;
     if (declinedIp) {
@@ -445,7 +633,12 @@ export class DhcpServer {
     }
   }
 
-  /** リース更新 REQUEST (RENEW) を処理する */
+  /**
+   * リース更新 REQUEST (RENEW) を処理する。
+   * T1 タイマー満了後にクライアントが unicast で送信するリース延長要求を処理する。
+   * 有効なリースが存在すれば ACK でリースを更新し、startTime と expiresAt をリセットする。
+   * リースが存在しないか失効済みの場合は NAK を返す。
+   */
   handleRenew(packet: DhcpPacket, time: number): { ack: DhcpPacket } | { nak: DhcpPacket } {
     const lease = this.leases.get(packet.chaddr);
     if (!lease || lease.state === "released" || lease.state === "expired") {
@@ -457,7 +650,11 @@ export class DhcpServer {
     return { ack: createAck(packet.xid, lease.ip, this.serverIp, packet.chaddr, this.pool, lease.duration) };
   }
 
-  /** 期限切れリースを処理する */
+  /**
+   * 指定時刻までに期限切れとなったリースを処理する。
+   * "bound" 状態のリースのうち expiresAt を過ぎたものを "expired" に遷移させ、
+   * IP をプールに返却する。返却されたリースの配列を返す。
+   */
   expireLeases(time: number): Lease[] {
     const expired: Lease[] = [];
     for (const [, lease] of this.leases) {

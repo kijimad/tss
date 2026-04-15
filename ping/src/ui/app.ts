@@ -1,3 +1,17 @@
+/**
+ * app.ts — Ping シミュレーター UI モジュール
+ *
+ * ブラウザ上で動作する Ping/Traceroute シミュレーターの
+ * ユーザーインターフェースを構築する。
+ *
+ * 機能:
+ *   - プリセット実験のセレクトボックスによる選択
+ *   - ping / traceroute の実行と結果表示
+ *   - RTT チャートのキャンバス描画
+ *   - パケットトレース (イベントログ) の表示
+ *   - 統計情報パネル
+ */
+
 import {
   PingSimulator, host, router, link,
 } from "../engine/ping.js";
@@ -8,14 +22,27 @@ import type {
 
 // ── プリセット実験 ──
 
+/** 実験のモード (ping または traceroute) */
 export type ExperimentMode = "ping" | "traceroute";
 
+/**
+ * プリセット実験の定義
+ *
+ * セレクトボックスから選択できる実験を表す。
+ * トポロジーと実行設定をセットで保持する。
+ */
 export interface Experiment {
+  /** 実験名 (セレクトボックスに表示) */
   name: string;
+  /** 実験の説明文 */
   description: string;
+  /** 実行モード */
   mode: ExperimentMode;
+  /** ネットワークトポロジー定義 */
   topology: Topology;
+  /** ping モード時の設定 */
   pingConfig?: PingConfig;
+  /** traceroute モード時の設定 */
   tracerouteConfig?: TracerouteConfig;
 }
 
@@ -233,6 +260,15 @@ export const EXPERIMENTS: Experiment[] = [
 
 // ── 色定義 ──
 
+/**
+ * イベントタイプに応じた表示色を返す
+ *
+ * パケットトレースログの各イベントを視覚的に区別するため、
+ * イベントタイプごとに異なる色を割り当てる。
+ *
+ * @param type - イベントタイプ
+ * @returns CSS カラーコード
+ */
 function eventColor(type: PingEvent["type"]): string {
   switch (type) {
     case "send":          return "#3b82f6";
@@ -248,7 +284,23 @@ function eventColor(type: PingEvent["type"]): string {
 
 // ── UI ──
 
+/**
+ * Ping シミュレーター アプリケーション
+ *
+ * ブラウザ上でネットワークシミュレーションの結果を表示する
+ * シングルページアプリケーション。DOM を動的に構築し、
+ * プリセット実験の選択・実行・結果表示を行う。
+ */
 export class PingApp {
+  /**
+   * アプリケーションを初期化し、UI をコンテナ要素に描画する
+   *
+   * ヘッダ (実験セレクトボックス、実行ボタン)、左パネル (設定・統計・応答一覧)、
+   * 右パネル (RTT チャート・パケットトレース) を構築し、
+   * イベントリスナーを登録して初期実験を読み込む。
+   *
+   * @param container - UI を挿入する HTML 要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 
@@ -334,14 +386,16 @@ export class PingApp {
     main.appendChild(rightPanel);
     container.appendChild(main);
 
-    // ── 描画 ──
+    // ── 描画ヘルパー ──
 
+    /** パネルに「ラベル: 値」の行を追加するヘルパー */
     const addRow = (p: HTMLElement, l: string, v: string, c: string) => {
       const r = document.createElement("div"); r.style.marginBottom = "2px";
       r.innerHTML = `<span style="color:${c};font-weight:600;">${l}:</span> <span style="color:#94a3b8;">${v}</span>`;
       p.appendChild(r);
     };
 
+    /** 実験の設定情報を左パネルに描画する */
     const renderPingConfig = (exp: Experiment) => {
       cfgDiv.innerHTML = "";
       if (exp.pingConfig) {
@@ -367,6 +421,7 @@ export class PingApp {
       addRow(cfgDiv, "リンク数", String(exp.topology.links.length), "#64748b");
     };
 
+    /** ping 統計情報 (送受信数、ロス率、RTT) を描画する */
     const renderPingStats = (stats: PingStats) => {
       statsDiv.innerHTML = "";
       addRow(statsDiv, "送信", String(stats.transmitted), "#e2e8f0");
@@ -378,6 +433,7 @@ export class PingApp {
       addRow(statsDiv, "RTT mdev", `${stats.rttMdev.toFixed(3)} ms`, "#a78bfa");
     };
 
+    /** ping 応答一覧を描画する (成功時は RTT、失敗時はエラー理由を表示) */
     const renderPingReplies = (replies: PingReply[]) => {
       replyDiv.innerHTML = "";
       for (const r of replies) {
@@ -398,6 +454,7 @@ export class PingApp {
       }
     };
 
+    /** traceroute のホップ一覧を描画する (各ホップの IP・RTT を表示) */
     const renderTracerouteHops = (hops: TracerouteHop[], reached: boolean) => {
       replyDiv.innerHTML = "";
       for (const h of hops) {
@@ -420,6 +477,12 @@ export class PingApp {
       }
     };
 
+    /**
+     * ping の RTT チャートをキャンバスに描画する
+     *
+     * 各シーケンスの RTT をバーグラフとドットで表示し、
+     * 失敗パケットは X マークで示す。平均 RTT の破線も描画する。
+     */
     const renderRttChart = (replies: PingReply[]) => {
       const dpr = devicePixelRatio;
       const cw = chartCanvas.clientWidth;
@@ -527,6 +590,12 @@ export class PingApp {
       }
     };
 
+    /**
+     * traceroute のホップ別 RTT チャートをキャンバスに描画する
+     *
+     * 各ホップのプローブ RTT をカラーバーで表示する。
+     * RTT が大きいほど暖色系になる。
+     */
     const renderTracerouteChart = (hops: TracerouteHop[]) => {
       const dpr = devicePixelRatio;
       const cw = chartCanvas.clientWidth;
@@ -588,6 +657,7 @@ export class PingApp {
       }
     };
 
+    /** パケットトレース (イベントログ) を時系列で描画する */
     const renderEvents = (events: PingEvent[]) => {
       evDiv.innerHTML = "";
       for (const ev of events) {

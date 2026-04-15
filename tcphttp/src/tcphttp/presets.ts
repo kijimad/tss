@@ -1,15 +1,45 @@
+/**
+ * @module presets
+ * シミュレーション用のプリセット定義モジュール。
+ * TCP/HTTPの代表的な通信パターン（ハンドシェイク、データ送受信、
+ * HTTP GET/POST、Keep-Alive、RST、エラーレスポンスなど）を
+ * セレクトボックスから選択可能なプリセットとして提供する。
+ */
+
 import type { Preset, HttpRequest, HttpResponse, SocketAddr } from "./types.js";
 
+/** クライアント側のデフォルトアドレス（プライベートIP） */
 const CLIENT: SocketAddr = { ip: "192.168.1.10", port: 50000 };
+/** サーバー側のデフォルトアドレス（example.comのIP） */
 const SERVER: SocketAddr = { ip: "93.184.216.34", port: 80 };
 
+/**
+ * HTTPリクエストオブジェクトを簡易的に生成するヘルパー。
+ * HTTP/1.1をデフォルトバージョンとし、Hostヘッダを自動付与する。
+ * @param method - HTTPメソッド
+ * @param path - リクエストパス
+ * @param headers - 追加のHTTPヘッダ
+ * @param body - リクエストボディ
+ * @returns HTTPリクエストオブジェクト
+ */
 function httpReq(method: "GET" | "POST" | "PUT" | "DELETE" | "HEAD" | "OPTIONS", path: string, headers: Record<string, string> = {}, body?: string): HttpRequest {
   return { method, path, version: "1.1", headers: { Host: "example.com", ...headers }, body };
 }
+
+/**
+ * HTTPレスポンスオブジェクトを簡易的に生成するヘルパー。
+ * HTTP/1.1をデフォルトバージョンとし、Content-Typeヘッダを自動付与する。
+ * @param code - HTTPステータスコード
+ * @param text - ステータステキスト
+ * @param headers - 追加のHTTPヘッダ
+ * @param body - レスポンスボディ
+ * @returns HTTPレスポンスオブジェクト
+ */
 function httpRes(code: number, text: string, headers: Record<string, string> = {}, body?: string): HttpResponse {
   return { statusCode: code, statusText: text, version: "1.1", headers: { "Content-Type": "text/html", ...headers }, body };
 }
 
+/** シミュレーション用プリセットの一覧 */
 export const presets: Preset[] = [
   // 1. TCP 3ウェイハンドシェイク
   {

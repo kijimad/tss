@@ -10,7 +10,15 @@
  */
 import type { DnsMessage, DnsRecord, DnsQuestion } from "./types.js";
 
-// DNS メッセージを ArrayBuffer にエンコードする
+/**
+ * DNS メッセージを ArrayBuffer にエンコードする
+ *
+ * ヘッダ(12バイト) → Question → Answer → Authority → Additional の順で
+ * バイナリデータを組み立てる。最大512バイト（UDP制限）。
+ *
+ * @param msg - エンコード対象のDNSメッセージ
+ * @returns エンコードされたバイナリデータ
+ */
 export function encodeDnsMessage(msg: DnsMessage): ArrayBuffer {
   // 最大512バイト（UDP制限）のバッファを確保
   const buf = new ArrayBuffer(512);
@@ -60,7 +68,13 @@ export function encodeDnsMessage(msg: DnsMessage): ArrayBuffer {
   return buf.slice(0, offset);
 }
 
-// Question をエンコード
+/**
+ * Question セクションの1エントリをエンコードする
+ * @param view - 書き込み先のDataView
+ * @param offset - 書き込み開始位置
+ * @param q - エンコード対象のQuestion
+ * @returns 書き込み後のオフセット
+ */
 function encodeQuestion(view: DataView, offset: number, q: DnsQuestion): number {
   offset = encodeDomainName(view, offset, q.name);
   view.setUint16(offset, q.type); offset += 2;
@@ -68,7 +82,17 @@ function encodeQuestion(view: DataView, offset: number, q: DnsQuestion): number 
   return offset;
 }
 
-// Resource Record をエンコード
+/**
+ * Resource Record を1件エンコードする
+ *
+ * 名前・型・クラス・TTL・RDATAを書き込み、RDLENGTHは
+ * RDATA書き込み後に逆算して埋める。
+ *
+ * @param view - 書き込み先のDataView
+ * @param offset - 書き込み開始位置
+ * @param r - エンコード対象のレコード
+ * @returns 書き込み後のオフセット
+ */
 function encodeRecord(view: DataView, offset: number, r: DnsRecord): number {
   offset = encodeDomainName(view, offset, r.name);
   view.setUint16(offset, r.type); offset += 2;
@@ -88,8 +112,17 @@ function encodeRecord(view: DataView, offset: number, r: DnsRecord): number {
   return offset;
 }
 
-// ドメイン名をラベル形式でエンコード
-// "example.com" → [7]example[3]com[0]
+/**
+ * ドメイン名をラベル形式でエンコードする
+ *
+ * 各ラベルの前に長さバイトを付け、最後に0x00で終端する。
+ * 例: "example.com" → [7]example[3]com[0]
+ *
+ * @param view - 書き込み先のDataView
+ * @param offset - 書き込み開始位置
+ * @param name - エンコード対象のドメイン名
+ * @returns 書き込み後のオフセット
+ */
 export function encodeDomainName(view: DataView, offset: number, name: string): number {
   if (name === "" || name === ".") {
     view.setUint8(offset, 0);
@@ -112,7 +145,17 @@ export function encodeDomainName(view: DataView, offset: number, name: string): 
   return offset;
 }
 
-// RDATA をレコード型に応じてエンコード
+/**
+ * RDATA をレコード型に応じてエンコードする
+ *
+ * Aレコードはドット区切りIPv4を4バイトに、AAAAはUTF-8バイト列に、
+ * NS/CNAME/MXはドメイン名形式でエンコードする。
+ *
+ * @param view - 書き込み先のDataView
+ * @param offset - RDATA の書き込み開始位置
+ * @param r - エンコード対象のレコード
+ * @returns 書き込み後のオフセット
+ */
 function encodeRdata(view: DataView, offset: number, r: DnsRecord): number {
   switch (r.type) {
     case 1: {

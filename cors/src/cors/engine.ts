@@ -1,4 +1,21 @@
-/* CORS シミュレーションエンジン */
+/*
+ * CORS シミュレーションエンジン
+ *
+ * ブラウザのCORS処理フローを忠実にエミュレートする。
+ * 実際のネットワーク通信は行わず、リクエスト定義とサーバー設定から
+ * ブラウザの動作（分類→プリフライト→CORSチェック）をシミュレートする。
+ *
+ * 処理の全体フロー:
+ *   1. リクエスト分類 (classifyRequest)
+ *      → 同一オリジン / 単純リクエスト / プリフライト必要 / no-cors を判定
+ *   2. プリフライト処理（必要な場合のみ）
+ *      → OPTIONSリクエストの送信＆レスポンス検証をエミュレート
+ *      → キャッシュの確認・保存も行う
+ *   3. 実リクエスト送信＆CORSヘッダ検証
+ *      → Access-Control-Allow-Origin 等のヘッダをチェック
+ *   4. 最終判定 (CorsVerdict)
+ *      → allowed / blocked_* / same_origin / opaque
+ */
 
 import type {
   CorsRequest, CorsServerConfig, CorsResponseHeaders,
@@ -10,48 +27,78 @@ import { SIMPLE_METHODS, SIMPLE_HEADERS, SIMPLE_CONTENT_TYPES } from "./types.js
 
 // ─── オリジンユーティリティ ───
 
-/** URLからオリジン抽出 */
+/**
+ * URLからオリジン部分（プロトコル + ホスト + ポート）を抽出する。
+ * 例: "https://example.com:8080/api/data?q=1" → "https://example.com:8080"
+ * 同一オリジンポリシーの判定に使用。
+ */
 export function extractOrigin(url: string): string {
   const m = url.match(/^(https?:\/\/[^/]+)/);
   return m ? m[1]! : url;
 }
 
-/** 同一オリジン判定 */
+/**
+ * 同一オリジン判定
+ * リクエスト元のオリジンとリクエスト先URLのオリジンが一致するか確認する。
+ * 一致する場合、CORSチェックは不要（ブラウザはそのままリクエストを通す）。
+ */
 export function isSameOrigin(origin: string, url: string): boolean {
   return extractOrigin(url) === origin;
 }
 
 // ─── リクエスト分類 ───
+// ブラウザはリクエストの内容に基づいて、プリフライトの要否を自動的に判定する。
+// 「単純リクエスト」の条件をすべて満たせばプリフライト不要、1つでも外れればプリフライトが必要。
 
-/** 単純ヘッダかどうか */
+/**
+ * 指定されたヘッダが「単純ヘッダ」（CORS-safelisted request header）かどうか判定する。
+ * 単純ヘッダの条件:
+ *   - ヘッダ名が accept, accept-language, content-language, content-type のいずれか
+ *   - content-type の場合、値が application/x-www-form-urlencoded, multipart/form-data,
+ *     text/plain のいずれか（application/json は非単純！）
+ */
 function isSimpleHeader(name: string, value?: string): boolean {
   const lower = name.toLowerCase();
   if (!SIMPLE_HEADERS.includes(lower)) return false;
+  // Content-Typeの場合、値も単純値であることが必要
   if (lower === "content-type" && value) {
     return SIMPLE_CONTENT_TYPES.includes(value.toLowerCase().split(";")[0]!.trim());
   }
   return true;
 }
 
-/** リクエストを分類 */
+/**
+ * リクエストを分類する（ブラウザの分類ロジックをエミュレート）
+ *
+ * 判定の優先順位:
+ *   1. 同一オリジン → CORSチェック不要
+ *   2. mode: "no-cors" → 不透明レスポンスとして処理
+ *   3. 非単純メソッド or 非単純ヘッダ → プリフライト必要
+ *   4. 上記以外 → 単純リクエスト（プリフライト不要）
+ */
 export function classifyRequest(req: CorsRequest): RequestClassification {
-  // 同一オリジン
+  // 同一オリジンであればCORSの対象外
   if (isSameOrigin(req.origin, req.url)) return "same_origin";
 
-  // no-corsモード
+  // no-corsモードでは不透明レスポンスが返る（JSからアクセス不可）
   if (req.mode === "no-cors") return "no_cors";
 
-  // 単純リクエスト判定
+  // 非単純メソッド（PUT, DELETE等）はプリフライト必要
   if (!SIMPLE_METHODS.includes(req.method)) return "preflight_cors";
 
+  // 非単純ヘッダが1つでもあればプリフライト必要
   for (const [name, value] of Object.entries(req.headers)) {
     if (!isSimpleHeader(name, value)) return "preflight_cors";
   }
 
+  // すべて単純条件を満たす → プリフライト不要
   return "simple_cors";
 }
 
-/** 非単純ヘッダを抽出 */
+/**
+ * リクエストヘッダから非単純ヘッダを抽出する。
+ * プリフライトの Access-Control-Request-Headers ヘッダに設定される値となる。
+ */
 function getNonSimpleHeaders(headers: Record<string, string>): string[] {
   return Object.keys(headers).filter(name => {
     const value = headers[name];

@@ -1,4 +1,11 @@
-/* QUIC プロトコル シミュレーションエンジン */
+/**
+ * @module engine
+ * @description QUICプロトコルシミュレーションエンジン。
+ * QUIC接続のライフサイクル（ハンドシェイク、データ転送、輻輳制御、
+ * コネクションマイグレーション、接続クローズ）を忠実にエミュレートする。
+ * ネットワーク条件（遅延、パケットロス等）をコード内でシミュレーションし、
+ * 外部ネットワークへの依存なしにQUICの動作を再現する。
+ */
 
 import type {
   QuicConnection, QuicPacket, QuicFrame, PacketHeader, PacketType,
@@ -9,14 +16,23 @@ import type {
 
 // ─── 定数 ───
 
-const INITIAL_CWND = 14720;         // 初期cwnd (bytes)
-const MIN_CWND = 2 * 1200;          // 最小cwnd
-const INITIAL_RTT = 333;            // 初期RTT推定 (ms)
-const MAX_DATAGRAM_SIZE = 1200;     // UDPペイロード最大
+/** 初期輻輳ウィンドウ (bytes) - RFC 9002推奨値 */
+const INITIAL_CWND = 14720;
+/** 最小輻輳ウィンドウ - 2パケット分 */
+const MIN_CWND = 2 * 1200;
+/** 初期RTT推定値 (ms) - ハンドシェイク前のデフォルト値 */
+const INITIAL_RTT = 333;
+/** UDPデータグラムの最大ペイロードサイズ (bytes) */
+const MAX_DATAGRAM_SIZE = 1200;
 
 // ─── 接続初期化 ───
 
-/** QUIC接続を生成 */
+/**
+ * QUIC接続オブジェクトを初期状態で生成する。
+ * コネクションIDの生成、TLS初期状態、フロー制御/輻輳制御の初期パラメータ設定を行う。
+ * @param algo - 使用する輻輳制御アルゴリズム（デフォルト: new_reno）
+ * @returns 初期化されたQUIC接続オブジェクト
+ */
 export function createConnection(algo: CongestionAlgo = "new_reno"): QuicConnection {
   return {
     localCid: genCid(),
@@ -61,7 +77,11 @@ export function createConnection(algo: CongestionAlgo = "new_reno"): QuicConnect
   };
 }
 
-/** コネクションID生成 */
+/**
+ * ランダムな16桁のコネクションIDを生成する。
+ * 実際のQUICでは可変長（0-20バイト）だが、シミュレーションでは8バイト固定。
+ * @returns 16桁の16進数文字列
+ */
 function genCid(): string {
   const hex = "0123456789abcdef";
   let cid = "";
@@ -71,7 +91,15 @@ function genCid(): string {
 
 // ─── パケット生成 ───
 
-/** パケット生成 */
+/**
+ * QUICパケットを生成する。
+ * パケット番号の自動採番、ヘッダ構築、サイズ計算を行う。
+ * @param conn - 現在のQUIC接続
+ * @param ptype - パケットタイプ（initial/handshake/one_rtt等）
+ * @param frames - パケットに含めるフレーム群
+ * @param encLevel - 暗号化レベル
+ * @returns 生成されたQUICパケット
+ */
 function mkPacket(
   conn: QuicConnection, ptype: PacketType, frames: QuicFrame[],
   encLevel: EncryptionLevel,
@@ -91,7 +119,12 @@ function mkPacket(
   };
 }
 
-/** ACKフレーム生成 */
+/**
+ * ACKフレームを生成する。
+ * 連続するパケット番号をレンジにまとめて効率的なACK表現を作成する。
+ * @param packets - ACK対象のパケット群
+ * @returns ACKフレーム（ackRangesフィールドを持つ）
+ */
 function mkAckFrame(packets: QuicPacket[]): QuicFrame {
   const pns = packets.map(p => p.header.packetNumber).sort((a, b) => a - b);
   const ranges: Array<{ start: number; end: number }> = [];
@@ -108,7 +141,15 @@ function mkAckFrame(packets: QuicPacket[]): QuicFrame {
 
 // ─── ハンドシェイク ───
 
-/** 1-RTTハンドシェイク実行 */
+/**
+ * 標準の1-RTTハンドシェイクを実行する。
+ * Client→Initial(ClientHello) → Server→Initial(ServerHello)+Handshake →
+ * Client→Handshake(Finished) → HANDSHAKE_DONE の流れをシミュレートする。
+ * TLS 1.3統合により、暗号ハンドシェイクとQUIC接続確立を同時に行う。
+ * @param conn - QUIC接続オブジェクト
+ * @param network - ネットワーク条件（遅延がRTTに影響）
+ * @param events - イベントログ配列（ハンドシェイク過程を記録）
+ */
 function doHandshake(
   conn: QuicConnection, network: NetworkCondition,
   events: SimEvent[],
@@ -199,7 +240,15 @@ function doHandshake(
   });
 }
 
-/** 0-RTTハンドシェイク実行 */
+/**
+ * 0-RTTハンドシェイクを実行する。
+ * PSK（Pre-Shared Key）を使用し、ハンドシェイク完了前にデータ送信を開始する。
+ * ClientHelloと同時に0-RTTパケットでアプリケーションデータを送信し、
+ * サーバーがearly_dataを受理することで低遅延のデータ転送を実現する。
+ * @param conn - QUIC接続オブジェクト
+ * @param network - ネットワーク条件
+ * @param events - イベントログ配列
+ */
 function doHandshake0Rtt(
   conn: QuicConnection, network: NetworkCondition,
   events: SimEvent[],
@@ -301,7 +350,15 @@ function doHandshake0Rtt(
 
 // ─── データ転送 ───
 
-/** ストリームオープン */
+/**
+ * 新しいストリームを開く。
+ * クライアント起点の場合、bidiストリームIDは0,4,8...、uniストリームIDは2,6,10...となる。
+ * QUICのストリームID採番規則（下位2ビットで方向と起点を示す）に従う。
+ * @param conn - QUIC接続オブジェクト
+ * @param direction - ストリーム方向（bidi/uni）
+ * @param events - イベントログ配列
+ * @returns 生成されたストリームオブジェクト
+ */
 function openStream(
   conn: QuicConnection, direction: StreamDirection, events: SimEvent[],
 ): QuicStream {
@@ -325,7 +382,18 @@ function openStream(
   return stream;
 }
 
-/** データ送信 */
+/**
+ * 指定ストリームでデータを送信する。
+ * フロー制御（コネクション/ストリームレベル）と輻輳制御（cwnd）の制約を考慮し、
+ * データをMSS以下のチャンクに分割してパケットを生成する。
+ * 帯域やフロー制御上限に達した場合、MAX_DATA/MAX_STREAM_DATAの受信をシミュレートする。
+ * パケットロスの確率的発生と輻輳制御への通知も行う。
+ * @param conn - QUIC接続オブジェクト
+ * @param streamId - 送信先ストリームID
+ * @param size - 送信データサイズ（bytes）
+ * @param network - ネットワーク条件（ロス率、遅延）
+ * @param events - イベントログ配列
+ */
 function sendData(
   conn: QuicConnection, streamId: number, size: number,
   network: NetworkCondition, events: SimEvent[],
@@ -428,7 +496,13 @@ function sendData(
   });
 }
 
-/** ACK処理 */
+/**
+ * 未ACKパケットのACK処理を実行する。
+ * ロストでないパケットをACK済みにし、bytesInFlightを減算する。
+ * ACK受信に基づく輻輳ウィンドウの更新と、ロストパケットの再送も行う。
+ * @param conn - QUIC接続オブジェクト
+ * @param events - イベントログ配列
+ */
 function processAcks(conn: QuicConnection, events: SimEvent[]): void {
   const unacked = conn.sentPackets.filter(p => !p.acked && !p.lost);
   if (unacked.length === 0) return;

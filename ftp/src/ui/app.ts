@@ -1,15 +1,31 @@
+/**
+ * FTPシミュレーションのブラウザUIモジュール。
+ * プリセット選択、ターミナル表示、ステップ表示、ファイルシステムツリー表示を行う。
+ * @module ui/app
+ */
+
 import { presets, runSimulation, cloneFs } from "../ftp/index.js";
 import type { SimulationResult, FsEntry } from "../ftp/index.js";
 
+/**
+ * FTPシミュレーションのブラウザアプリケーションクラス。
+ * プリセット選択UI、ターミナルログ、ステップ一覧、ファイルシステムツリーを描画する。
+ */
 export class FtpApp {
+  /** アプリケーションのルートコンテナ要素 */
   private container!: HTMLElement;
 
+  /**
+   * アプリケーションを初期化し、指定されたDOM要素にUIを描画する。
+   * @param el - マウント先のHTML要素（nullの場合は何もしない）
+   */
   init(el: HTMLElement | null): void {
     if (!el) return;
     this.container = el;
     this.render();
   }
 
+  /** アプリケーション全体のHTML構造とスタイルを描画し、イベントリスナーを設定する */
   private render(): void {
     this.container.innerHTML = `
       <style>
@@ -71,6 +87,10 @@ export class FtpApp {
     this.runPreset(0);
   }
 
+  /**
+   * 指定されたプリセットでFTPシミュレーションを実行し、結果を各パネルに描画する。
+   * @param index - プリセット配列のインデックス
+   */
   private runPreset(index: number): void {
     const preset = presets[index]!;
     const result = runSimulation(preset.users, cloneFs(preset.fs), preset.commands);
@@ -80,6 +100,11 @@ export class FtpApp {
     this.renderFs(result.finalFs);
   }
 
+  /**
+   * FTPセッションのコントロール接続ログをターミナル風に描画する。
+   * クライアントコマンド、サーバーレスポンス、データ転送を色分けして表示する。
+   * @param result - シミュレーション結果
+   */
   private renderTerminal(result: SimulationResult): void {
     const el = this.container.querySelector("#terminal-panel")!;
     let html = "<h2>FTP Session (Control Connection)</h2><div class=\"terminal\">";
@@ -106,6 +131,11 @@ export class FtpApp {
     el.innerHTML = html;
   }
 
+  /**
+   * シミュレーションの各ステップをカード形式で描画する。
+   * コマンド名、成否バッジ、データ転送情報、セッション状態を表示する。
+   * @param result - シミュレーション結果
+   */
   private renderSteps(result: SimulationResult): void {
     const el = this.container.querySelector("#steps-panel")!;
     let html = "<h2>Steps</h2><div class=\"events-scroll\">";
@@ -136,6 +166,10 @@ export class FtpApp {
     el.innerHTML = html;
   }
 
+  /**
+   * セッション終了後のファイルシステム状態をツリー形式で描画する。
+   * @param fs - ファイルシステムのルートエントリ
+   */
   private renderFs(fs: FsEntry): void {
     const el = this.container.querySelector("#fs-panel")!;
     let html = "<h2>File System (After Session)</h2><div class=\"fs-tree\">";
@@ -144,6 +178,13 @@ export class FtpApp {
     el.innerHTML = html;
   }
 
+  /**
+   * ファイルシステムエントリを再帰的にHTMLとして描画する。
+   * ディレクトリはフォルダアイコン付き、ファイルはサイズ情報付きで表示する。
+   * @param entry - 描画対象のファイルシステムエントリ
+   * @param depth - インデントの深さ（ネスト階層）
+   * @returns HTML文字列
+   */
   private renderFsEntry(entry: FsEntry, depth: number): string {
     const indent = "&nbsp;".repeat(depth * 3);
     if (entry.type === "directory") {
@@ -156,6 +197,11 @@ export class FtpApp {
     return `<div>${indent}<span class="fs-file">📄 ${this.escapeHtml(entry.name)}</span> <span class="fs-size">(${entry.size}B)</span></div>`;
   }
 
+  /**
+   * HTML特殊文字をエスケープしてXSS攻撃を防止する。
+   * @param s - エスケープ対象の文字列
+   * @returns エスケープ済みの文字列
+   */
   private escapeHtml(s: string): string {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }

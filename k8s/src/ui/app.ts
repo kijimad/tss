@@ -1,19 +1,49 @@
+/**
+ * app.ts — Kubernetes シミュレータの UI モジュール
+ *
+ * ブラウザ上でクラスタの状態を可視化する。
+ * セレクトボックスからプリセット実験を選択し、ステップ実行またはオート実行で
+ * Kubernetes のスケジューリング・スケーリング・障害復旧などの動作を観察できる。
+ */
+
 import { Cluster } from "../cluster/cluster.js";
 import type { KubectlCommand, ClusterSnapshot, Pod, K8sEvent, Deployment, Container } from "../cluster/cluster.js";
 
+/**
+ * 実験プリセットの定義
+ * セレクトボックスから選択可能なシナリオを表す
+ */
 export interface Example {
+  /** プリセット名 (UI のセレクトボックスに表示) */
   name: string;
+  /** シナリオの説明文 */
   description: string;
+  /** シミュレーションで使用するノード構成 */
   nodes: { name: string; cpuCapacity: number; memCapacity: number; taints?: string[] }[];
   /** 順番に実行する kubectl コマンド + advance */
   steps: { commands: KubectlCommand[]; advanceTicks: number; label: string }[];
 }
 
+// ── コンテナテンプレート定義 ──
+// 各シナリオで使い回すコンテナ定義
+
+/** Web サーバ (nginx) コンテナ: 軽量 (100m CPU, 128Mi メモリ) */
 const webContainer: Container = { name: "nginx", image: "nginx:1.25", cpuRequest: 100, memRequest: 128 };
+/** API サーバ (Node.js) コンテナ: 中程度 (250m CPU, 256Mi メモリ) */
 const apiContainer: Container = { name: "api", image: "node:20-slim", cpuRequest: 250, memRequest: 256 };
+/** ワーカー (Python) コンテナ: 重い (500m CPU, 512Mi メモリ) */
 const workerContainer: Container = { name: "worker", image: "python:3.12", cpuRequest: 500, memRequest: 512 };
+/** データベース (PostgreSQL) コンテナ: 重い (500m CPU, 512Mi メモリ) */
 const dbContainer: Container = { name: "postgres", image: "postgres:16", cpuRequest: 500, memRequest: 512 };
 
+/**
+ * Deployment オブジェクトを簡易生成するヘルパー関数
+ * @param name - Deployment 名 (ラベルセレクタ app=name も自動設定)
+ * @param replicas - レプリカ数
+ * @param containers - コンテナ定義の配列
+ * @param strategy - 更新戦略 (デフォルト: RollingUpdate)
+ * @returns Deployment 定義オブジェクト
+ */
 function dep(name: string, replicas: number, containers: Container[], strategy: "RollingUpdate" | "Recreate" = "RollingUpdate"): Deployment {
   return {
     name, namespace: "default", replicas, selector: { app: name },
@@ -22,6 +52,7 @@ function dep(name: string, replicas: number, containers: Container[], strategy: 
   };
 }
 
+/** 実験プリセット一覧: セレクトボックスから選択できるシナリオの配列 */
 export const EXAMPLES: Example[] = [
   {
     name: "Pod スケジューリング基礎",
@@ -129,6 +160,11 @@ export const EXAMPLES: Example[] = [
   },
 ];
 
+/**
+ * Pod のフェーズに応じた表示色を返す
+ * @param phase - Pod のライフサイクルフェーズ
+ * @returns CSS カラーコード (16進数)
+ */
 function phaseColor(phase: Pod["phase"]): string {
   switch (phase) {
     case "Pending":           return "#f59e0b";
@@ -141,7 +177,18 @@ function phaseColor(phase: Pod["phase"]): string {
   }
 }
 
+/**
+ * Kubernetes シミュレータの UI アプリケーションクラス
+ * ブラウザ上にクラスタの状態を3パネル構成で可視化する
+ * - 左パネル: ノードと Pod の配置状況
+ * - 中央パネル: Deployment と Service の状態
+ * - 右パネル: イベントログ
+ */
 export class K8sApp {
+  /**
+   * アプリケーションを初期化し、指定されたコンテナ要素に UI を構築する
+   * @param container - UI を描画するルート HTML 要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 
@@ -214,6 +261,7 @@ export class K8sApp {
 
     // ── 描画 ──
 
+    /** ノードパネルを描画する: 各ノードのリソース使用率と Pod 配置を表示 */
     const renderNodes = (snap: ClusterSnapshot) => {
       nodeDiv.innerHTML = "";
       for (const node of snap.nodes) {
@@ -268,6 +316,7 @@ export class K8sApp {
       }
     };
 
+    /** 中央パネルを描画する: Deployment のレプリカ状態と Service のエンドポイントを表示 */
     const renderServices = (snap: ClusterSnapshot) => {
       svcDiv.innerHTML = "";
       // Deployments
@@ -292,6 +341,7 @@ export class K8sApp {
       }
     };
 
+    /** イベントパネルを描画する: 直近40件のイベントを時系列で表示 */
     const renderEvents = (events: readonly K8sEvent[]) => {
       evDiv.innerHTML = "";
       const recent = events.slice(-40);
@@ -311,10 +361,14 @@ export class K8sApp {
 
     // ── ロジック ──
 
+    /** 現在実行中のクラスタインスタンス */
     let cluster: Cluster | null = null;
+    /** 現在のシナリオのステップ一覧 */
     let currentSteps: Example["steps"] = [];
+    /** 次に実行するステップのインデックス */
     let stepIdx = 0;
 
+    /** 実験プリセットを読み込み、クラスタを初期化して画面をリセットする */
     const loadExample = (ex: Example) => {
       descSpan.textContent = ex.description;
       cluster = new Cluster(ex.nodes);
@@ -324,6 +378,7 @@ export class K8sApp {
       renderNodes(snap); renderServices(snap); evDiv.innerHTML = "";
     };
 
+    /** 現在のステップを実行し、コマンド適用 → tick 進行 → 描画更新を行う */
     const executeStep = () => {
       if (cluster === null || stepIdx >= currentSteps.length) return;
       const step = currentSteps[stepIdx]!;
@@ -334,6 +389,7 @@ export class K8sApp {
       renderNodes(snap); renderServices(snap); renderEvents(cluster.eventLog);
     };
 
+    /** 全ステップを 600ms 間隔で自動実行する */
     const runAll = () => {
       if (cluster === null) return;
       stepIdx = 0;
@@ -345,9 +401,11 @@ export class K8sApp {
       doStep();
     };
 
+    // ── イベントリスナー登録 ──
     exSelect.addEventListener("change", () => { const ex = EXAMPLES[Number(exSelect.value)]; if (ex) loadExample(ex); });
     runBtn.addEventListener("click", () => { const ex = EXAMPLES[Number(exSelect.value)]; if (ex) { loadExample(ex); runAll(); } });
     stepBtn.addEventListener("click", executeStep);
+    // 初期表示: 最初のプリセットを読み込む
     loadExample(EXAMPLES[0]!);
   }
 }

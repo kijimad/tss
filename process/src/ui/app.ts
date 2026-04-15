@@ -1,8 +1,21 @@
+/**
+ * app.ts — プロセスシミュレーターの UI モジュール
+ *
+ * 実験プリセットの定義とブラウザ上での可視化を担当する。
+ * セレクトボックスで実験を選択し、プロセスツリー・詳細・カーネルトレースを表示する。
+ */
+
 import { ProcessSimulator, createInitProc, defaultFds } from "../engine/process.js";
 import type { SyscallOp, SimResult, SimEvent, Process } from "../engine/process.js";
 
+/**
+ * 実験プリセットの定義
+ *
+ * 各プリセットは初期プロセスとシステムコール操作の配列を持つ。
+ */
 export interface Experiment { name: string; description: string; initProc: ReturnType<typeof createInitProc>; ops: SyscallOp[]; }
 
+/** 実験プリセット一覧 — セレクトボックスから選択可能 */
 export const EXPERIMENTS: Experiment[] = [
   {
     name: "fork + exec — 子プロセス起動",
@@ -146,16 +159,33 @@ export const EXPERIMENTS: Experiment[] = [
   },
 ];
 
-// ── 色 ──
+// ── 表示用カラー定数 ──
+
+/** レイヤー別の表示色 (カーネルトレースのラベル色) */
 const LC: Record<string, string> = { Kernel: "#64748b", Syscall: "#3b82f6", Signal: "#ef4444", Sched: "#f59e0b", Memory: "#a78bfa", IPC: "#22c55e", FD: "#06b6d4", App: "#e2e8f0" };
+/** プロセス状態別の表示色 */
 const SC: Record<string, string> = { created: "#64748b", ready: "#3b82f6", running: "#22c55e", sleeping: "#a78bfa", stopped: "#f59e0b", zombie: "#ef4444", terminated: "#475569" };
+/** イベントタイプ別のアイコン */
 const TI: Record<string, string> = { info: "●", create: "+", state: "⇄", signal: "⚡", ipc: "↔", fd: "📁", error: "✗", exit: "☠" };
 
+/**
+ * プロセスシミュレーターのアプリケーションクラス
+ *
+ * ブラウザ上に UI を構築し、実験の選択・実行・結果表示を行う。
+ * 左パネルにプロセスツリーと詳細、右パネルにカーネルトレースを表示する。
+ */
 export class ProcessApp {
+  /**
+   * アプリケーションを初期化し、指定されたコンテナに UI を構築する
+   *
+   * @param container - UI を挿入する HTML 要素
+   */
   init(container: HTMLElement): void {
+    // ── ヘッダー構築: タイトル、実験選択セレクトボックス、実行ボタン、説明文 ──
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
     const header = document.createElement("div"); header.style.cssText = "padding:8px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1e293b;flex-wrap:wrap;";
     const title = document.createElement("h1"); title.textContent = "Process Simulator"; title.style.cssText = "margin:0;font-size:15px;white-space:nowrap;"; header.appendChild(title);
+    // 実験プリセット選択用セレクトボックス
     const exSelect = document.createElement("select"); exSelect.style.cssText = "padding:4px 8px;background:#1e293b;border:1px solid #334155;border-radius:4px;color:#f8fafc;font-size:12px;";
     for (let i = 0; i < EXPERIMENTS.length; i++) { const o = document.createElement("option"); o.value = String(i); o.textContent = EXPERIMENTS[i]!.name; exSelect.appendChild(o); }
     header.appendChild(exSelect);
@@ -163,8 +193,10 @@ export class ProcessApp {
     const descSpan = document.createElement("span"); descSpan.style.cssText = "font-size:10px;color:#64748b;margin-left:auto;max-width:500px;"; header.appendChild(descSpan);
     container.appendChild(header);
 
+    // ── メインレイアウト: 左パネル (プロセスツリー + 詳細) と右パネル (カーネルトレース) ──
     const main = document.createElement("div"); main.style.cssText = "flex:1;display:flex;overflow:hidden;";
     const leftPanel = document.createElement("div"); leftPanel.style.cssText = "width:380px;display:flex;flex-direction:column;border-right:1px solid #1e293b;overflow-y:auto;font-size:10px;";
+    /** ラベル付きセクションを左パネルに追加するヘルパー */
     const ms = (l: string, c: string) => { const lb = document.createElement("div"); lb.style.cssText = `padding:4px 12px;font-size:11px;font-weight:600;color:${c};border-bottom:1px solid #1e293b;`; lb.textContent = l; leftPanel.appendChild(lb); const d = document.createElement("div"); d.style.cssText = "padding:8px 12px;border-bottom:1px solid #1e293b;"; leftPanel.appendChild(d); return d; };
     const treeDiv = ms("Process Tree", "#22c55e");
     const procLabel = document.createElement("div"); procLabel.style.cssText = "padding:4px 12px;font-size:11px;font-weight:600;color:#06b6d4;border-bottom:1px solid #1e293b;"; procLabel.textContent = "Process Details"; leftPanel.appendChild(procLabel);
@@ -176,6 +208,7 @@ export class ProcessApp {
     const evDiv = document.createElement("div"); evDiv.style.cssText = "flex:1;padding:4px 8px;font-size:9px;overflow-y:auto;line-height:1.7;"; rightPanel.appendChild(evDiv);
     main.appendChild(rightPanel); container.appendChild(main);
 
+    /** プロセスツリーを再帰的に描画する */
     const renderTree = (tree: SimResult["processTree"]) => {
       treeDiv.innerHTML = "";
       const roots = tree.filter((p) => p.ppid === 0);
@@ -188,6 +221,7 @@ export class ProcessApp {
       for (const r of roots) renderNode(r, 0);
     };
 
+    /** 全プロセスの詳細情報をカード形式で描画する */
     const renderProcs = (procs: Process[]) => {
       procDiv.innerHTML = "";
       for (const p of procs) {
@@ -200,6 +234,7 @@ export class ProcessApp {
       }
     };
 
+    /** カーネルトレース (イベントログ) を時系列で描画する */
     const renderEvents = (events: SimEvent[]) => {
       evDiv.innerHTML = "";
       for (const ev of events) {
@@ -210,14 +245,18 @@ export class ProcessApp {
       }
     };
 
+    /** 実験プリセットを読み込み、説明文を表示して画面をリセットする */
     const load = (e: Experiment) => { descSpan.textContent = e.description; treeDiv.innerHTML = ""; procDiv.innerHTML = '<span style="color:#475569;">▶ Run</span>'; evDiv.innerHTML = ""; };
+    /** 実験を実行し、シミュレーション結果を各パネルに描画する */
     const run = (e: Experiment) => {
       const sim = new ProcessSimulator();
       const r = sim.simulate(e.initProc, e.ops);
       renderTree(r.processTree); renderProcs(r.processes); renderEvents(r.events);
     };
+    // ── イベントリスナー登録 ──
     exSelect.addEventListener("change", () => { const e = EXPERIMENTS[Number(exSelect.value)]; if (e) load(e); });
     runBtn.addEventListener("click", () => { const e = EXPERIMENTS[Number(exSelect.value)]; if (e) run(e); });
+    // 初期表示: 最初の実験プリセットを読み込む
     load(EXPERIMENTS[0]!);
   }
 }

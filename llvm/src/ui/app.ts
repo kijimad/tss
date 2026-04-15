@@ -1,11 +1,30 @@
+/**
+ * @module app
+ * LLVM シミュレーターのブラウザ UI モジュール。
+ * プリセット選択、シミュレーション実行、結果の描画を担当する。
+ * 統計パネル、最適化パス結果、レジスタ割り当て可視化、
+ * x86-64 アセンブリ表示、イベントログを含む。
+ */
+
 import { runSimulation } from "../llvm/engine.js";
 import { presets } from "../llvm/presets.js";
 import type { SimulationResult, PassResult, LiveInterval, MachineInsn } from "../llvm/types.js";
 
+/**
+ * HTML 特殊文字をエスケープして XSS を防止する。
+ * @param s - エスケープ対象の文字列
+ * @returns エスケープ済み文字列
+ */
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * イベント種別に応じた表示色を返す。
+ * イベントログの視覚的な区別に使用される。
+ * @param type - イベント種別文字列
+ * @returns CSS カラーコード
+ */
 function eventColor(type: string): string {
   const c: Record<string, string> = {
     ir: "#60a5fa", pass: "#a78bfa", fold: "#4ade80", eliminate: "#f43f5e",
@@ -16,6 +35,13 @@ function eventColor(type: string): string {
   return c[type] ?? "#94a3b8";
 }
 
+/**
+ * 統計パネルの HTML を生成する。
+ * IR 命令数、除去数、最適化数、パス数、phi ノード数、
+ * レジスタ使用数、スピル数、マシン命令数を表示する。
+ * @param result - シミュレーション結果
+ * @returns 統計パネルの HTML 文字列
+ */
 function renderStats(result: SimulationResult): string {
   const s = result.stats;
   return `
@@ -34,6 +60,12 @@ function renderStats(result: SimulationResult): string {
     </div>`;
 }
 
+/**
+ * 最適化パス結果パネルの HTML を生成する。
+ * 各パスの名前、変更数、説明、個々の変更内容を表示する。
+ * @param result - シミュレーション結果
+ * @returns パス結果パネルの HTML 文字列
+ */
 function renderPassResults(result: SimulationResult): string {
   if (result.passResults.length === 0) return "";
   return `
@@ -60,6 +92,13 @@ function renderPassResults(result: SimulationResult): string {
     </div>`;
 }
 
+/**
+ * レジスタ割り当て結果パネルの HTML を生成する。
+ * 物理レジスタ一覧、生存区間のバーチャート、スピル情報を
+ * 色分けして可視化する。
+ * @param result - シミュレーション結果
+ * @returns レジスタ割り当てパネルの HTML 文字列
+ */
 function renderRegAlloc(result: SimulationResult): string {
   if (!result.regAlloc) return "";
   const ra = result.regAlloc;

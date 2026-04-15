@@ -24,73 +24,194 @@
  *         └── PS/2 コントローラ
  */
 
-// デバイスの状態
+/**
+ * デバイスの状態を表す定数オブジェクト。
+ *
+ * POST（Power-On Self-Test）の各フェーズにおいて、
+ * ハードウェアデバイスは以下の状態遷移を辿る:
+ *
+ *   NotDetected → Detecting → OK (正常) / Failed (故障)
+ *
+ * BIOSは電源投入直後、全デバイスを NotDetected として扱い、
+ * 検出・テストを経て最終的な状態を決定する。
+ * Disabled はCMOS設定でユーザーが無効化したデバイスに使用される。
+ */
 export const DeviceStatus = {
+  /** 未検出: POST開始前の初期状態 */
   NotDetected: "not_detected",
+  /** 検出中: BIOSがデバイスを認識しテスト実行中 */
   Detecting: "detecting",
+  /** 正常: テスト合格、使用可能 */
   OK: "ok",
+  /** 故障: テスト不合格、使用不可 */
   Failed: "failed",
+  /** 無効: CMOS設定により無効化されている */
   Disabled: "disabled",
 } as const;
 export type DeviceStatus = (typeof DeviceStatus)[keyof typeof DeviceStatus];
 
-// CPU
+/**
+ * CPU情報インターフェース。
+ *
+ * BIOSはPOSTの最初の段階でCPUのCPUID命令を実行し、
+ * ベンダー文字列（例: "GenuineIntel"）やモデル名、
+ * 対応する命令セット拡張（SSE、AVX等）を取得する。
+ *
+ * リアルモード（16ビット）で動作するBIOSにとって、
+ * CPUの検出は全てのハードウェア初期化の前提条件となる。
+ * CPU自己テストに失敗した場合、POST続行不可能となり
+ * ビープコード（例: 5回短音）で通知される。
+ */
 export interface CpuInfo {
+  /** CPUベンダーID文字列（CPUID命令で取得） */
   vendor: string;       // "GenuineIntel" | "AuthenticAMD"
+  /** CPUモデル名（ブランド文字列） */
   model: string;        // "Intel Core i7-13700K"
+  /** 物理コア数 */
   cores: number;
+  /** 論理スレッド数（Hyper-Threading有効時はcoresの倍） */
   threads: number;
-  clockMhz: number;     // ベースクロック
-  cacheL1: number;      // KB
-  cacheL2: number;      // KB
-  cacheL3: number;      // KB
+  /** ベースクロック周波数（MHz単位） */
+  clockMhz: number;
+  /** L1キャッシュサイズ（KB）- 命令/データキャッシュ合計 */
+  cacheL1: number;
+  /** L2キャッシュサイズ（KB）- コアごとの統合キャッシュ */
+  cacheL2: number;
+  /** L3キャッシュサイズ（KB）- 全コア共有のLLCキャッシュ */
+  cacheL3: number;
+  /** 対応CPU機能フラグ（CPUID命令で検出） */
   features: string[];   // ["SSE4.2", "AVX2", "AES-NI", ...]
+  /** デバイス状態 */
   status: DeviceStatus;
 }
 
-// RAM
+/**
+ * RAMスロット情報インターフェース。
+ *
+ * BIOSはSPD（Serial Presence Detect）を通じて各DIMMスロットの
+ * メモリモジュール情報を読み取る。SPDはメモリモジュール上の
+ * 小さなEEPROMチップに格納されており、I2Cバス経由でアクセスされる。
+ *
+ * その後、メモリテスト（パターンテスト: 0x00, 0xFF, 0x55, 0xAA）を
+ * 実行し、全アドレスへの読み書きが正常に行えるか検証する。
+ * メモリ不良はビープコード（長1回+短2回）で通知され、POST失敗となる。
+ *
+ * デュアルチャネル構成の場合、A1+B1 または A2+B2 の対で
+ * 装着することで帯域幅が倍増する。
+ */
 export interface RamSlot {
-  slot: string;         // "DIMM A1", "DIMM B1"
-  size: number;         // MB (0=空)
-  type: string;         // "DDR4-3200", "DDR5-5600"
+  /** スロット名称（例: "DIMM A1"）- マザーボード上の物理位置 */
+  slot: string;
+  /** メモリサイズ（MB単位）。0の場合はスロットが空 */
+  size: number;
+  /** メモリ規格（例: "DDR5-5600"）- SPDから取得 */
+  type: string;
+  /** メモリモジュール製造元 */
   manufacturer: string;
-  speed: number;        // MHz
+  /** 動作クロック速度（MHz単位） */
+  speed: number;
+  /** デバイス状態 */
   status: DeviceStatus;
 }
 
-// ストレージ
+/**
+ * ストレージデバイス情報インターフェース。
+ *
+ * BIOSはINT 13h（ディスクサービス割り込み）を通じて
+ * ストレージデバイスへアクセスする。POST完了後のブートシーケンスでは、
+ * CMOS設定のブート順序に従い、各デバイスの先頭セクタ（512バイト）を
+ * 読み込み、MBR（Master Boot Record）シグネチャ（0x55AA）の有無を確認する。
+ *
+ * MBRの構造（512バイト）:
+ *   - オフセット 0x000〜0x1BD: ブートストラップコード（446バイト）
+ *   - オフセット 0x1BE〜0x1FD: パーティションテーブル（4エントリ×16バイト）
+ *   - オフセット 0x1FE〜0x1FF: ブートシグネチャ（0x55, 0xAA）
+ *
+ * 有効なMBRが見つかると、BIOSはその512バイトを物理アドレス
+ * 0x0000:7C00にロードし、そこにジャンプしてブートローダーに制御を渡す。
+ */
 export interface StorageDevice {
+  /** デバイス識別番号 */
   id: number;
+  /** デバイス種別: HDD（磁気ディスク）、SSD（SATA接続フラッシュ）、NVMe（PCIe接続フラッシュ）、USB、CD-ROM */
   type: "hdd" | "ssd" | "nvme" | "usb" | "cdrom";
-  name: string;         // "Samsung 980 PRO 1TB"
-  sizeMB: number;
-  interface: string;    // "SATA III", "NVMe PCIe 4.0"
-  serialNumber: string;
-  bootable: boolean;    // MBR/GPT があるか
-  mbr: Uint8Array | undefined; // 先頭512バイト
-  status: DeviceStatus;
-}
-
-// PCI デバイス
-export interface PciDevice {
-  bus: number;
-  device: number;
-  function: number;
-  vendorId: number;
-  deviceId: number;
-  className: string;    // "VGA Compatible Controller"
-  vendorName: string;   // "NVIDIA"
-  deviceName: string;   // "GeForce RTX 4090"
-  status: DeviceStatus;
-}
-
-// USB デバイス
-export interface UsbDevice {
-  port: number;
-  vendorId: number;
-  productId: number;
+  /** デバイス名称（メーカー・型番） */
   name: string;
+  /** 容量（MB単位） */
+  sizeMB: number;
+  /** 接続インターフェース規格 */
+  interface: string;    // "SATA III", "NVMe PCIe 4.0"
+  /** シリアル番号（デバイス固有識別子） */
+  serialNumber: string;
+  /** ブート可能フラグ: MBRまたはGPTが存在するか */
+  bootable: boolean;
+  /** MBRデータ（先頭512バイト）。ブート不可の場合はundefined */
+  mbr: Uint8Array | undefined;
+  /** デバイス状態 */
+  status: DeviceStatus;
+}
+
+/**
+ * PCIデバイス情報インターフェース。
+ *
+ * BIOSはPOST中にPCI（Peripheral Component Interconnect）バスを
+ * スキャンし、接続されている全デバイスを列挙する。
+ * 各デバイスはバス番号:デバイス番号:ファンクション番号（BDF）で
+ * 一意に識別される。
+ *
+ * PCIコンフィギュレーション空間（256バイト）の先頭にある
+ * ベンダーID（2バイト）とデバイスID（2バイト）で
+ * デバイスの種類を特定する。ベンダーID 0xFFFFは
+ * デバイスが存在しないことを意味する。
+ *
+ * BIOSはPCIデバイスにI/Oポートアドレスやメモリマップドアドレスを
+ * 割り当て、割り込み線（IRQ）を設定する。
+ */
+export interface PciDevice {
+  /** PCIバス番号（0〜255） */
+  bus: number;
+  /** デバイス番号（0〜31）- バス上の物理スロット位置 */
+  device: number;
+  /** ファンクション番号（0〜7）- マルチファンクションデバイス用 */
+  function: number;
+  /** ベンダーID（16ビット）- PCI-SIG管理のメーカー識別子（例: 0x8086=Intel, 0x10DE=NVIDIA） */
+  vendorId: number;
+  /** デバイスID（16ビット）- ベンダー固有の製品識別子 */
+  deviceId: number;
+  /** PCIクラス名（デバイスの機能カテゴリ） */
+  className: string;    // "VGA Compatible Controller"
+  /** ベンダー名称（人間可読） */
+  vendorName: string;   // "NVIDIA"
+  /** デバイス名称（人間可読） */
+  deviceName: string;   // "GeForce RTX 4090"
+  /** デバイス状態 */
+  status: DeviceStatus;
+}
+
+/**
+ * USBデバイス情報インターフェース。
+ *
+ * BIOSはUSBコントローラ（xHCI/EHCI/OHCI）を初期化した後、
+ * 接続されているUSBデバイスを列挙する。
+ * キーボードやマウスについてはUSBレガシーサポートにより、
+ * INT 16h（キーボード）やINT 33h（マウス）経由で
+ * リアルモードからもアクセス可能にする。
+ *
+ * USBブートが有効な場合、USBストレージデバイスも
+ * ブートデバイス候補として扱われる。
+ */
+export interface UsbDevice {
+  /** USBポート番号 */
+  port: number;
+  /** USBベンダーID（例: 0x046D=Logitech） */
+  vendorId: number;
+  /** USB製品ID */
+  productId: number;
+  /** デバイス名称 */
+  name: string;
+  /** デバイス種別 */
   type: "keyboard" | "mouse" | "storage" | "hub" | "other";
+  /** デバイス状態 */
   status: DeviceStatus;
 }
 

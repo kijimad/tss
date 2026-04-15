@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unix V6 シミュレーター</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a1a; color: #e0e0e0; font-family: 'Menlo','Consolas',monospace; font-size: 13px; }
+    #app { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    h3 { font-size: 13px; color: #7dd3fc; margin-bottom: 8px; border-bottom: 1px solid #1e1e3e; padding-bottom: 4px; }
+    .controls { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .controls label { color: #aaa; font-size: 12px; }
+    select, button { background: #111128; color: #e0e0e0; border: 1px solid #2a2a4a; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-family: inherit; font-size: 12px; }
+    select:hover, button:hover { border-color: #00d4ff; }
+    button:disabled { opacity: .4; cursor: default; }
+    input[type="range"] { width: 100px; }
+    .desc { color: #888; font-size: 11px; }
+    .step-info { color: #7dd3fc; font-size: 12px; margin-left: 8px; }
+    .panels { display: grid; gap: 10px; margin-bottom: 10px; }
+    .top { grid-template-columns: 1fr 1fr; }
+    .mid { grid-template-columns: 1fr 1fr; }
+    .bot2 { grid-template-columns: 1fr 1fr; }
+    .panel { background: #0d0d20; border: 1px solid #1e1e3e; border-radius: 6px; padding: 10px; max-height: 340px; overflow-y: auto; }
+    .empty { color: #555; font-style: italic; font-size: 11px; }
+
+    /* テーブル */
+    .tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .tbl th { background: #111128; color: #7dd3fc; padding: 3px 6px; text-align: left; font-weight: normal; }
+    .tbl td { padding: 3px 6px; border-top: 1px solid #1a1a2e; }
+    .st-run { color: #4ade80; }
+    .st-zom { color: #f87171; }
+    .st-slp { color: #facc15; }
+    .st-rdy { color: #22d3ee; }
+    .st-other { color: #888; }
+    .mode { color: #a78bfa; }
+    .blks { font-size: 10px; color: #888; }
+    .ind { color: #fb923c; font-weight: bold; }
+
+    /* バッファキャッシュ */
+    .buf-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+    .buf-slot { width: 60px; padding: 4px; border-radius: 3px; text-align: center; font-size: 10px; border: 1px solid #1e1e3e; }
+    .buf-clean { background: #0a2a1a; }
+    .buf-dirty { background: #2a1a0a; border-color: #fb923c; }
+    .buf-busy { background: #0a1a2a; border-color: #22d3ee; }
+    .buf-id { font-weight: bold; color: #e0e0e0; }
+    .buf-flags { font-size: 9px; color: #888; }
+
+    /* ディスク */
+    .disk-row { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
+    .dblk { display: inline-block; width: 28px; height: 20px; line-height: 20px; text-align: center; font-size: 9px; border-radius: 2px; cursor: default; }
+    .dblk-superblock { background: #4a1a4a; color: #f472b6; }
+    .dblk-inode { background: #1a2a4a; color: #60a5fa; }
+    .dblk-data { background: #1a3a1a; color: #4ade80; }
+    .dblk-indirect { background: #3a2a0a; color: #fb923c; }
+    .dblk-free { background: #1a1a1a; color: #555; }
+    .sub-section { font-size: 10px; color: #888; margin-top: 4px; }
+    .sf, .pp { font-size: 10px; padding: 1px 0; }
+
+    /* イベント */
+    .ev { font-size: 11px; padding: 2px 4px; margin-bottom: 2px; border-radius: 2px; }
+    .ev-detail { font-size: 10px; color: #666; margin-top: 1px; padding-left: 8px; }
+    .ev-boot, .ev-superblock_read, .ev-init_start { color: #f472b6; }
+    .ev-fork, .ev-exec { color: #60a5fa; }
+    .ev-wait, .ev-zombie_reap { color: #818cf8; }
+    .ev-exit, .ev-orphan_reparent { color: #a78bfa; }
+    .ev-inode_alloc, .ev-inode_free { color: #22d3ee; }
+    .ev-inode_read, .ev-inode_write { color: #06b6d4; }
+    .ev-block_alloc, .ev-block_free { color: #34d399; }
+    .ev-dir_lookup, .ev-dir_add, .ev-dir_remove { color: #4ade80; }
+    .ev-path_resolve { color: #a3e635; }
+    .ev-file_open, .ev-file_close, .ev-file_creat { color: #7dd3fc; }
+    .ev-file_read, .ev-file_write { color: #38bdf8; }
+    .ev-link_create, .ev-unlink_remove { color: #c4b5fd; }
+    .ev-buf_hit { color: #4ade80; }
+    .ev-buf_miss { color: #facc15; }
+    .ev-buf_writeback, .ev-buf_evict { color: #fb923c; }
+    .ev-pipe_create, .ev-pipe_write, .ev-pipe_read, .ev-pipe_close { color: #06b6d4; }
+    .ev-signal_send { color: #f87171; }
+    .ev-signal_deliver, .ev-signal_default { color: #ef4444; font-weight: bold; }
+    .ev-signal_ignore { color: #888; }
+    .ev-signal_catch { color: #facc15; }
+    .ev-sched_switch, .ev-sched_priority { color: #818cf8; }
+    .ev-syscall { color: #888; }
+    .ev-error { color: #f87171; font-weight: bold; }
+    .ev-comment { color: #555; font-style: italic; }
+    .ev-swap_out, .ev-swap_in { color: #f472b6; }
+    .ev-text_alloc, .ev-text_free, .ev-text_share { color: #e879f9; }
+    .ev-tty_input, .ev-tty_output, .ev-tty_canon { color: #4ade80; }
+    .ev-tty_intr, .ev-tty_ioctl { color: #facc15; }
+    .ev-dev_strategy, .ev-dev_start, .ev-dev_interrupt, .ev-dev_complete { color: #fb923c; }
+    .ev-mount, .ev-umount { color: #38bdf8; }
+    .ev-perm_check { color: #888; }
+    .ev-perm_denied { color: #f87171; font-weight: bold; }
+    .ev-suid_exec { color: #ef4444; font-weight: bold; }
+    .ev-data_expand, .ev-stack_grow { color: #e879f9; }
+    .ev-file_seek { color: #38bdf8; }
+    .ev-mknod { color: #22d3ee; }
+    .ev-ptrace_request, .ev-ptrace_stop { color: #a78bfa; }
+    .ev-buf_readahead { color: #facc15; }
+    .ev-physio { color: #fb923c; }
+    .ev-pipe_lock, .ev-pipe_unlock { color: #06b6d4; }
+    .ev-callout, .ev-clock_tick { color: #facc15; }
+    .ev-sched_swap { color: #f472b6; }
+    .ev-inode_ref, .ev-inode_unref { color: #22d3ee; font-size: 10px; }
+    .ev-count { font-size: 10px; color: #7dd3fc; background: #111128; padding: 3px 8px; margin-bottom: 4px; border-radius: 3px; position: sticky; top: 0; z-index: 1; }
+
+    .log { font-size: 11px; color: #888; padding: 1px 4px; white-space: nowrap; }
+    .log-cur { color: #e0e0e0; background: #14143a; border-radius: 2px; }
+
+    /* strace パネル */
+    .strace-row { grid-template-columns: 1fr; }
+    .strace-panel { max-height: 240px; background: #050510; border-color: #1a2a1a; }
+    .strace-panel h3 { color: #4ade80; font-family: inherit; }
+    .strace-line { font-size: 11px; color: #8b8b8b; padding: 1px 6px; white-space: pre; font-family: 'Menlo','Consolas',monospace; }
+    .strace-new { color: #4ade80; background: #0a1a0a; }
+
+    /* カーネルトレースパネル群 */
+    .trace-grid { grid-template-columns: 1fr 1fr; }
+    .trace-panel { max-height: 220px; background: #050510; }
+    .trace-line { font-size: 11px; color: #8b8b8b; padding: 1px 6px; white-space: pre; font-family: 'Menlo','Consolas',monospace; }
+    .ctx-panel { border-color: #2a1a3a; }
+    .ctx-panel h3 { color: #a78bfa; }
+    .ctx-new { color: #a78bfa; background: #0f0a1a; }
+    .namei-panel { border-color: #1a2a2a; }
+    .namei-panel h3 { color: #22d3ee; }
+    .namei-new { color: #22d3ee; background: #0a0f1a; }
+    .mem-panel { border-color: #2a2a1a; }
+    .mem-panel h3 { color: #facc15; }
+    .mem-new { color: #facc15; background: #1a1a0a; }
+    .trap-panel { border-color: #2a1a1a; }
+    .trap-panel h3 { color: #f87171; }
+    .trap-new { color: #f87171; background: #1a0a0a; }
+
+    /* TTYパネル */
+    .tty-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tty-card { background: #0a0a18; border: 1px solid #1e3a2e; border-radius: 4px; padding: 6px 8px; min-width: 200px; font-size: 10px; }
+    .tty-card .tty-name { color: #4ade80; font-weight: bold; font-size: 11px; margin-bottom: 4px; }
+    .tty-card .tty-q { color: #888; }
+    .tty-card .tty-q b { color: #22d3ee; font-weight: normal; }
+    .tty-card .tty-flags { color: #a78bfa; margin-top: 2px; }
+    .tty-card .tty-special { color: #fb923c; margin-top: 2px; }
+
+    /* テキストテーブル / スワップマップ */
+    .swap-section { margin-bottom: 6px; }
+    .swap-section strong { color: #f472b6; font-size: 11px; }
+    .swap-entry { font-size: 10px; color: #888; padding: 1px 4px; }
+    .text-entry { font-size: 10px; color: #888; padding: 1px 4px; }
+    .text-shared { color: #facc15; }
+
+    /* マウントテーブル */
+    .mount-entry { font-size: 10px; color: #888; padding: 2px 4px; border-bottom: 1px solid #1a1a2e; }
+    .mount-path { color: #22d3ee; }
+    .mount-dev { color: #fb923c; }
+
+    /* 割り込みベクタ / sysent / デバイススイッチ */
+    .vec-tbl { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .vec-tbl th { background: #111128; color: #f472b6; padding: 2px 5px; text-align: left; font-weight: normal; }
+    .vec-tbl td { padding: 2px 5px; border-top: 1px solid #1a1a2e; color: #888; }
+    .vec-tbl .vec-pri { color: #facc15; }
+    .sysent-tbl th { color: #a78bfa; }
+    .devsw-tbl th { color: #fb923c; }
+    .hw-grid { grid-template-columns: 1fr 1fr 1fr; }
+
+    /* シェル端末 */
+    .shell-row { grid-template-columns: 1fr; }
+    .shell-panel { max-height: none; background: #020208; border-color: #1a3a1a; }
+    .shell-panel h3 { color: #4ade80; }
+    .shell-output {
+      font-family: 'Menlo','Consolas',monospace; font-size: 12px;
+      color: #c0c0c0; background: #020208;
+      padding: 8px; min-height: 120px; max-height: 300px;
+      overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+      line-height: 1.5;
+    }
+    .shell-output .sh-prompt { color: #4ade80; }
+    .shell-output .sh-cmd { color: #e0e0e0; }
+    .shell-output .sh-result { color: #888; }
+    .shell-output .sh-error { color: #f87171; }
+    .shell-output .sh-info { color: #7dd3fc; }
+    .shell-input-row {
+      display: flex; align-items: center; gap: 0;
+      border-top: 1px solid #1a3a1a; background: #060612;
+    }
+    .shell-input-row .prompt-label {
+      color: #4ade80; padding: 6px 4px 6px 8px; font-size: 12px;
+      white-space: nowrap; font-family: 'Menlo','Consolas',monospace;
+    }
+    .shell-input-row input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: #e0e0e0; font-family: 'Menlo','Consolas',monospace; font-size: 12px;
+      padding: 6px 4px;
+    }
+    .shell-input-row button {
+      border-radius: 0; border-left: 1px solid #1a3a1a;
+      padding: 6px 12px;
+    }
+    .shell-help-text { font-size: 10px; color: #555; padding: 4px 8px; border-top: 1px solid #1a1a2e; }
+
+    /* モード切り替えタブ */
+    .mode-tabs { display: flex; gap: 0; margin-bottom: 10px; }
+    .mode-tab {
+      padding: 6px 16px; background: #111128; border: 1px solid #2a2a4a;
+      color: #888; cursor: pointer; font-family: inherit; font-size: 12px;
+      border-bottom: none;
+    }
+    .mode-tab:first-child { border-radius: 6px 0 0 0; }
+    .mode-tab:last-child { border-radius: 0 6px 0 0; }
+    .mode-tab.active { background: #0d0d20; color: #7dd3fc; border-color: #00d4ff; border-bottom: 1px solid #0d0d20; }
+    .mode-content { display: none; }
+    .mode-content.active { display: block; }
+
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/ui/app.ts"></script>
+</body>
+</html>

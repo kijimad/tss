@@ -1,3 +1,11 @@
+/**
+ * app.ts — HTTPS シミュレーター UI モジュール
+ *
+ * ブラウザ上で HTTPS/TLS ハンドシェイクの実験を実行・可視化するための
+ * ユーザーインターフェースを提供する。プリセット実験の定義、シーケンス図の
+ * 描画、パケットトレースの表示、セッション情報の表示を行う。
+ */
+
 import {
   HttpsSimulator, createValidCertChain, createInvalidCertChain,
   CIPHER_SUITES, randomHex, prf,
@@ -8,18 +16,24 @@ import type {
 
 // ── プリセット実験 ──
 
+/**
+ * 実験プリセットの定義インターフェース
+ * セレクトボックスから選択可能な各実験シナリオを表す
+ */
 export interface Experiment {
   name: string;
   description: string;
   config: HttpsConfig;
 }
 
+/** デフォルトの HTTP リクエスト設定 (GET /api/data) */
 const defaultRequest = {
   method: "GET",
   path: "/api/data",
   headers: { "Host": "example.com", "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
 };
 
+/** デフォルトの HTTP レスポンス設定 (200 OK, JSON) */
 const defaultResponse = {
   statusCode: 200,
   statusText: "OK",
@@ -27,6 +41,7 @@ const defaultResponse = {
   body: '{"status":"ok","data":[1,2,3]}',
 };
 
+/** デフォルトのネットワーク設定 (RTT 50ms、パケットロスなし、100Mbps) */
 const defaultNetwork = { rttMs: 50, packetLossRate: 0, bandwidthMbps: 100 };
 
 /** TLS 1.3 のデフォルト暗号スイート */
@@ -41,7 +56,10 @@ const tls12Suites = [
   "TLS_RSA_WITH_AES_128_GCM_SHA256",
 ];
 
-/** 模擬的な以前のセッション */
+/**
+ * セッション再開実験用の模擬的な以前のセッション情報を生成する
+ * @returns TLS セッション情報 (ランダムな鍵材料を含む)
+ */
 function makePreviousSession(): TlsSession {
   const clientRandom = randomHex(32);
   const serverRandom = randomHex(32);
@@ -64,6 +82,11 @@ function makePreviousSession(): TlsSession {
   };
 }
 
+/**
+ * 実験プリセット一覧
+ * TLS 1.3/1.2 の各種シナリオ、エラーケース、セッション再開、
+ * 高レイテンシ環境など様々な状況をシミュレーションできる
+ */
 export const EXPERIMENTS: Experiment[] = [
   {
     name: "TLS 1.3 フルハンドシェイク",
@@ -196,6 +219,11 @@ export const EXPERIMENTS: Experiment[] = [
 
 // ── イベントの色 ──
 
+/**
+ * プロトコル層に応じた表示色を返す
+ * @param layer プロトコル層 (TCP, TLS, HTTP, Network)
+ * @returns CSS カラーコード
+ */
 function layerColor(layer: TraceEvent["layer"]): string {
   switch (layer) {
     case "TCP":     return "#64748b";
@@ -205,6 +233,11 @@ function layerColor(layer: TraceEvent["layer"]): string {
   }
 }
 
+/**
+ * 通信方向に応じたアイコン文字を返す
+ * @param dir 通信方向 (client→server, server→client, internal)
+ * @returns 矢印またはドットのアイコン
+ */
 function directionIcon(dir: TraceEvent["direction"]): string {
   switch (dir) {
     case "client→server": return "→";
@@ -213,6 +246,11 @@ function directionIcon(dir: TraceEvent["direction"]): string {
   }
 }
 
+/**
+ * 通信方向に応じた表示色を返す
+ * @param dir 通信方向
+ * @returns CSS カラーコード
+ */
 function directionColor(dir: TraceEvent["direction"]): string {
   switch (dir) {
     case "client→server": return "#22c55e";
@@ -221,6 +259,13 @@ function directionColor(dir: TraceEvent["direction"]): string {
   }
 }
 
+/**
+ * ハンドシェイクフェーズに応じた表示色を返す
+ * Hello 系は青、証明書系は黄、鍵交換系はピンク、完了系は緑、
+ * アラート系は赤など、フェーズごとに色分けする
+ * @param phase フェーズ名
+ * @returns CSS カラーコード
+ */
 function phaseColor(phase: string): string {
   if (phase.includes("Hello")) return "#3b82f6";
   if (phase.includes("Certificate") || phase.includes("CertVerify")) return "#f59e0b";
@@ -235,7 +280,18 @@ function phaseColor(phase: string): string {
 
 // ── UI ──
 
+/**
+ * HTTPS シミュレーター アプリケーションクラス
+ *
+ * ブラウザ上で HTTPS/TLS 接続のシミュレーションを実行し、
+ * シーケンス図、パケットトレース、セッション情報を可視化する。
+ * プリセットの実験シナリオをセレクトボックスから選択して実行できる。
+ */
 export class HttpsApp {
+  /**
+   * アプリケーションを初期化し、指定されたコンテナ要素に UI を構築する
+   * @param container アプリケーションを描画する HTML 要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 
@@ -329,6 +385,7 @@ export class HttpsApp {
 
     // ── 描画ロジック ──
 
+    /** 実験の接続設定情報を左パネルに描画する */
     const renderConfig = (exp: Experiment) => {
       cfgDiv.innerHTML = "";
       const add = (l: string, v: string, c: string) => {
@@ -348,6 +405,7 @@ export class HttpsApp {
       if (exp.config.forceCertError) add("証明書エラー", "強制挿入", "#ef4444");
     };
 
+    /** シミュレーション結果の統計情報を左パネルに描画する */
     const renderStats = (result: SimulationResult) => {
       statsDiv.innerHTML = "";
       const add = (l: string, v: string, c: string) => {
@@ -364,6 +422,7 @@ export class HttpsApp {
       add("受信量", `${result.bytesReceived} bytes`, "#06b6d4");
     };
 
+    /** TLS セッション情報 (鍵、ID など) を左パネルに描画する */
     const renderSession = (session: TlsSession | null) => {
       sessionDiv.innerHTML = "";
       if (!session) {
@@ -386,6 +445,11 @@ export class HttpsApp {
       add("Resumable", session.resumable ? "Yes" : "No", "#64748b");
     };
 
+    /**
+     * シーケンス図を Canvas 上に描画する
+     * クライアントとサーバーの生命線を描き、各パケットを矢印で表現する。
+     * 暗号化されたレコードは太線で描画し、鍵アイコンを付与する。
+     */
     const renderSequenceDiagram = (result: SimulationResult) => {
       const dpr = devicePixelRatio;
       const cw = seqCanvas.clientWidth;
@@ -484,6 +548,11 @@ export class HttpsApp {
       }
     };
 
+    /**
+     * パケットトレースのイベントログを右パネルに描画する
+     * 各イベントのタイムスタンプ、方向、プロトコル層、フェーズ、詳細を
+     * 色分けして表示する。hex ダンプがある場合は折りたたみ表示する。
+     */
     const renderEvents = (events: TraceEvent[]) => {
       evDiv.innerHTML = "";
       for (const ev of events) {
@@ -520,6 +589,7 @@ export class HttpsApp {
 
     // ── ロジック ──
 
+    /** 選択された実験プリセットを読み込み、設定情報を表示する (シミュレーションは実行しない) */
     const loadExperiment = (exp: Experiment) => {
       descSpan.textContent = exp.description;
       renderConfig(exp);
@@ -528,6 +598,7 @@ export class HttpsApp {
       evDiv.innerHTML = "";
     };
 
+    /** 実験を実行し、シミュレーション結果を全パネルに描画する */
     const runSimulation = (exp: Experiment) => {
       const sim = new HttpsSimulator();
       const result = sim.simulate(exp.config);
@@ -538,10 +609,12 @@ export class HttpsApp {
       renderEvents(result.events);
     };
 
+    // セレクトボックス変更時に実験プリセットを切り替える
     exSelect.addEventListener("change", () => {
       const exp = EXPERIMENTS[Number(exSelect.value)];
       if (exp) loadExperiment(exp);
     });
+    // Run ボタンクリック時にシミュレーションを実行する
     runBtn.addEventListener("click", () => {
       const exp = EXPERIMENTS[Number(exSelect.value)];
       if (exp) runSimulation(exp);

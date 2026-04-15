@@ -1,4 +1,11 @@
-/* MITM シミュレーター エンジン */
+/**
+ * @module engine
+ * MITM（中間者攻撃）シミュレーターのコアエンジン。
+ *
+ * ネットワークノードの生成、証明書の生成・検証、パケットの作成・改ざん、
+ * ARP/DNSスプーフィング、TLS検証、各種MITM攻撃のシミュレーション、
+ * 防御勧告の生成などの機能を提供する。
+ */
 
 import type {
   NetNode, Protocol, TlsVersion, Certificate, Packet,
@@ -9,7 +16,11 @@ import type {
 
 // ─── デフォルトノード ───
 
-/** デフォルトネットワークノード群 */
+/**
+ * デフォルトのネットワークノード群を生成する。
+ * クライアント、Webサーバー、攻撃者、ルーター、DNSサーバーの5ノードを返す。
+ * @returns シミュレーション用のネットワークノード配列
+ */
 export function defaultNodes(): NetNode[] {
   return [
     { id: "client", name: "クライアント", role: "client", ip: "192.168.1.10", mac: "AA:BB:CC:DD:EE:01" },
@@ -22,7 +33,12 @@ export function defaultNodes(): NetNode[] {
 
 // ─── 証明書 ───
 
-/** 正規のサーバー証明書 */
+/**
+ * 正規のサーバー証明書を生成する。
+ * Let's Encrypt発行の信頼された証明書をシミュレートする。
+ * @param domain - 証明書の対象ドメイン名
+ * @returns 正規の証明書オブジェクト
+ */
 export function validCert(domain: string): Certificate {
   return {
     subject: domain,
@@ -35,7 +51,12 @@ export function validCert(domain: string): Certificate {
   };
 }
 
-/** 攻撃者の偽証明書 */
+/**
+ * 攻撃者が生成した偽の自己署名証明書を作成する。
+ * 信頼されたCAによる署名がなく、証明書検証で検出可能。
+ * @param domain - 偽装対象のドメイン名
+ * @returns 偽造された証明書オブジェクト
+ */
 export function forgedCert(domain: string): Certificate {
   return {
     subject: domain,
@@ -48,7 +69,12 @@ export function forgedCert(domain: string): Certificate {
   };
 }
 
-/** 擬似SHA256（シミュレーション用） */
+/**
+ * 擬似SHA256ハッシュ値を生成する（シミュレーション用）。
+ * 実際の暗号学的ハッシュではなく、表示用の64文字16進文字列を生成する。
+ * @param input - ハッシュ対象の文字列
+ * @returns 64文字の擬似ハッシュ値
+ */
 function fakeSha256(input: string): string {
   let hash = 0;
   for (let i = 0; i < input.length; i++) {
@@ -60,9 +86,22 @@ function fakeSha256(input: string): string {
 
 // ─── パケット生成 ───
 
+/** パケットIDの自動採番用カウンター */
 let packetId = 0;
 
-/** パケット生成 */
+/**
+ * ネットワークパケットを生成する。
+ * 送信元・宛先のIP/MACアドレス、ペイロード、暗号化状態を指定してパケットを作成する。
+ * @param protocol - 通信プロトコル
+ * @param srcIp - 送信元IPアドレス
+ * @param dstIp - 宛先IPアドレス
+ * @param srcMac - 送信元MACアドレス
+ * @param dstMac - 宛先MACアドレス
+ * @param payload - ペイロードデータ
+ * @param encrypted - 暗号化されているか
+ * @param tls - TLSバージョン
+ * @returns 生成されたパケット
+ */
 export function createPacket(
   protocol: Protocol, srcIp: string, dstIp: string,
   srcMac: string, dstMac: string, payload: string,
@@ -77,7 +116,13 @@ export function createPacket(
   };
 }
 
-/** パケットを改ざんする */
+/**
+ * パケットを改ざんする。
+ * 元のペイロードを保存した上で、新しいペイロードに置き換えた改ざん済みパケットを返す。
+ * @param pkt - 改ざん対象のパケット
+ * @param newPayload - 改ざん後のペイロード
+ * @returns 改ざんされた新しいパケット（元パケットは変更されない）
+ */
 export function tamperPacket(pkt: Packet, newPayload: string): Packet {
   return {
     ...pkt,
@@ -87,7 +132,13 @@ export function tamperPacket(pkt: Packet, newPayload: string): Packet {
   };
 }
 
-/** 暗号化ペイロードを生成（シミュレーション） */
+/**
+ * ペイロードを暗号化する（シミュレーション用）。
+ * Base64エンコード後に文字をシフトして擬似的な暗号文を生成する。
+ * 実際の暗号化アルゴリズムではなく、表示上の暗号化を模倣する。
+ * @param payload - 平文のペイロード
+ * @returns 擬似暗号化されたペイロード文字列
+ */
 export function encryptPayload(payload: string): string {
   // Base64風の暗号文を生成
   return btoa(payload).replace(/./g, (c) => {
@@ -96,7 +147,14 @@ export function encryptPayload(payload: string): string {
   });
 }
 
-/** 復号を試みる（TLSなしなら平文、ありなら失敗） */
+/**
+ * 傍受したパケットの復号を試みる。
+ * 暗号化されていないパケットはそのまま平文を返す。
+ * 暗号化されたパケットは攻撃者には復号できないため失敗する。
+ * @param payload - 復号対象のペイロード
+ * @param encrypted - 暗号化されているか
+ * @returns 復号の成否と平文（失敗時は復号不可のメッセージ）
+ */
 export function tryDecrypt(payload: string, encrypted: boolean): { success: boolean; plaintext: string } {
   if (!encrypted) return { success: true, plaintext: payload };
   return { success: false, plaintext: "[暗号化データ - 復号不可]" };
@@ -104,12 +162,28 @@ export function tryDecrypt(payload: string, encrypted: boolean): { success: bool
 
 // ─── ARP スプーフィング ───
 
-/** 正常なARPテーブルを生成 */
+/**
+ * 正常な（未攻撃の）ARPテーブルを生成する。
+ * 各ノードのIP-MAC対応が正しく設定されたテーブルを返す。
+ * @param nodes - ネットワークノード一覧
+ * @returns 正常なARPテーブルエントリの配列
+ */
 export function normalArpTable(nodes: NetNode[]): ArpEntry[] {
   return nodes.map(n => ({ ip: n.ip, mac: n.mac, spoofed: false }));
 }
 
-/** ARPスプーフィング攻撃を実行 */
+/**
+ * ARPスプーフィング攻撃を実行する。
+ * 攻撃者が偽のARP応答を送信し、ターゲットIPのMACアドレスを攻撃者のものに書き換える。
+ * 静的ARPエントリが設定されている場合は攻撃がブロックされる。
+ * @param arpTable - 現在のARPテーブル
+ * @param targetIp - 偽装対象のIPアドレス
+ * @param attackerMac - 攻撃者のMACアドレス
+ * @param defense - 防御設定
+ * @param steps - 攻撃ステップの記録先配列（副作用で追記される）
+ * @param events - イベントログの記録先配列（副作用で追記される）
+ * @returns 更新後のARPテーブルと攻撃の成否
+ */
 export function arpSpoof(
   arpTable: ArpEntry[], targetIp: string, attackerMac: string,
   defense: Defense, steps: AttackStep[], events: SimEvent[],
@@ -149,7 +223,11 @@ export function arpSpoof(
 
 // ─── DNS スプーフィング ───
 
-/** 正常なDNSレコードを生成 */
+/**
+ * 正常な（未攻撃の）DNSレコードを生成する。
+ * シミュレーション用の既定ドメイン解決情報を返す。
+ * @returns 正常なDNSレコードの配列
+ */
 export function normalDnsRecords(): DnsRecord[] {
   return [
     { domain: "example.com", ip: "203.0.113.50", spoofed: false },
@@ -157,7 +235,18 @@ export function normalDnsRecords(): DnsRecord[] {
   ];
 }
 
-/** DNSスプーフィング攻撃を実行 */
+/**
+ * DNSスプーフィング攻撃を実行する。
+ * 攻撃者が偽のDNS応答を送信し、ドメインの解決先IPを攻撃者のものに書き換える。
+ * DNSSECが有効な場合は偽応答が検出されて攻撃がブロックされる。
+ * @param records - 現在のDNSレコード
+ * @param targetDomain - 偽装対象のドメイン名
+ * @param attackerIp - 攻撃者のIPアドレス（誘導先）
+ * @param defense - 防御設定
+ * @param steps - 攻撃ステップの記録先配列（副作用で追記される）
+ * @param events - イベントログの記録先配列（副作用で追記される）
+ * @returns 更新後のDNSレコードと攻撃の成否
+ */
 export function dnsSpoof(
   records: DnsRecord[], targetDomain: string, attackerIp: string,
   defense: Defense, steps: AttackStep[], events: SimEvent[],
@@ -196,7 +285,17 @@ export function dnsSpoof(
 
 // ─── TLS / 証明書検証 ───
 
-/** TLS接続を検証する */
+/**
+ * TLS接続と証明書を検証する。
+ * TLSバージョンの最小要件チェック、証明書の信頼性検証、
+ * 証明書ピンニングによる偽証明書検出を行う。
+ * @param tls - 使用するTLSバージョン
+ * @param cert - サーバー証明書（TLS未使用時はundefined可）
+ * @param defense - 防御設定
+ * @param steps - 攻撃ステップの記録先配列（副作用で追記される）
+ * @param events - イベントログの記録先配列（副作用で追記される）
+ * @returns 検証の成否と失敗理由の一覧
+ */
 export function validateTls(
   tls: TlsVersion, cert: Certificate | undefined,
   defense: Defense, steps: AttackStep[], events: SimEvent[],
@@ -268,7 +367,13 @@ export function validateTls(
 
 // ─── 攻撃シミュレーション ───
 
-/** 攻撃を実行 */
+/**
+ * 単一の攻撃シミュレーションを実行する。
+ * 指定された攻撃手法に応じたフェーズ（ARP/DNSスプーフィング、パケット傍受、
+ * 復号試行、改ざん、転送など）を順に実行し、結果を返す。
+ * @param op - シミュレーション操作（攻撃手法、プロトコル、防御設定等）
+ * @returns 攻撃結果（ステップ、パケット、成否、防御勧告等を含む）
+ */
 export function simulateAttack(op: SimOp): AttackResult {
   packetId = 0;
   const nodes = defaultNodes();
@@ -649,7 +754,17 @@ export function simulateAttack(op: SimOp): AttackResult {
   };
 }
 
-/** 防御勧告を生成 */
+/**
+ * 攻撃結果に基づいて防御勧告を生成する。
+ * 攻撃が成功した場合、未有効の防御策を推奨メッセージとして追加する。
+ * 全防御が機能していた場合は成功メッセージを返す。
+ * @param op - 実行したシミュレーション操作
+ * @param intercepted - パケットが傍受されたか
+ * @param dataLeaked - データが漏洩したか
+ * @param tampered - データが改ざんされたか
+ * @param blocked - 防御によりブロックされた理由の配列
+ * @param mitigations - 防御勧告の出力先配列（副作用で追記される）
+ */
 function generateMitigations(
   op: SimOp, intercepted: boolean, dataLeaked: boolean, tampered: boolean,
   blocked: string[], mitigations: string[],
@@ -686,7 +801,12 @@ function generateMitigations(
   }
 }
 
-/** 攻撃手法のラベルを取得 */
+/**
+ * 攻撃手法の日本語ラベルを取得する。
+ * UI表示用に攻撃手法コードを人間が読める名前に変換する。
+ * @param method - 攻撃手法コード
+ * @returns 日本語の攻撃手法名
+ */
 export function attackMethodLabel(method: AttackMethod): string {
   const labels: Record<AttackMethod, string> = {
     arp_spoofing: "ARPスプーフィング",
@@ -702,7 +822,11 @@ export function attackMethodLabel(method: AttackMethod): string {
 
 // ─── 防御プリセット ───
 
-/** 防御なし */
+/**
+ * 防御なしの設定を生成する。
+ * すべての防御メカニズムが無効な状態。攻撃が最も成功しやすい。
+ * @returns 防御無効の設定オブジェクト
+ */
 export function noDefense(): Defense {
   return {
     hsts: false, certPinning: false, dnssec: false,
@@ -710,7 +834,12 @@ export function noDefense(): Defense {
   };
 }
 
-/** フル防御 */
+/**
+ * フル防御の設定を生成する。
+ * HSTS、証明書ピンニング、DNSSEC、静的ARP、TLS1.2以上、厳格な証明書検証が
+ * すべて有効な状態。多層防御のデモンストレーション用。
+ * @returns 全防御有効の設定オブジェクト
+ */
 export function fullDefense(): Defense {
   return {
     hsts: true, certPinning: true, dnssec: true,
@@ -718,12 +847,20 @@ export function fullDefense(): Defense {
   };
 }
 
-/** HSTS のみ */
+/**
+ * HSTSのみ有効な防御設定を生成する。
+ * SSLストリッピング攻撃に対する防御効果の検証に使用する。
+ * @returns HSTS有効の設定オブジェクト
+ */
 export function hstsOnly(): Defense {
   return { ...noDefense(), hsts: true };
 }
 
-/** 証明書検証のみ */
+/**
+ * 証明書検証のみ有効な防御設定を生成する。
+ * 厳格な証明書検証と証明書ピンニングを有効にし、偽証明書攻撃への防御効果を検証する。
+ * @returns 証明書検証有効の設定オブジェクト
+ */
 export function certDefense(): Defense {
   return { ...noDefense(), strictCertValidation: true, certPinning: true };
 }

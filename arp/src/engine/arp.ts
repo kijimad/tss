@@ -1,17 +1,70 @@
 /**
  * arp.ts — ARP (Address Resolution Protocol) エミュレーションエンジン
  *
- * RFC 826 に基づく ARP Request/Reply、キャッシュ管理、
- * Gratuitous ARP、Proxy ARP、ARP スプーフィング、
- * テーブルエージング、DAD (重複アドレス検出) をシミュレーションする。
+ * ============================================================
+ * ARP (Address Resolution Protocol) とは
+ * ============================================================
+ *
+ * ARP は RFC 826 で定義されたプロトコルで、ネットワーク層（L3）の
+ * IP アドレスをデータリンク層（L2）の MAC アドレスに変換する。
+ * TCP/IP 通信において、実際のフレーム送信には宛先 MAC アドレスが
+ * 必須であるため、ARP はイーサネットネットワークの基盤となる。
+ *
+ * ARP は OSI モデルの L2/L3 の境界で動作する。IP パケットを Ethernet
+ * フレームに格納して送信するために、宛先の MAC アドレスが必要であり、
+ * その解決を担うのが ARP である。
+ *
+ * ---- 動作の流れ ----
+ * 1. ホスト A がホスト B と通信したい場合、まず ARP キャッシュを確認
+ * 2. キャッシュミスの場合、ARP Request をブロードキャスト (ff:ff:ff:ff:ff:ff) で送信
+ * 3. ブロードキャストドメイン内の全ホストがフレームを受信
+ * 4. ターゲット IP を持つホスト B がユニキャストで ARP Reply を返す
+ * 5. ホスト A は受信した Reply で ARP キャッシュを更新し、通信を開始
+ *
+ * ---- ARP パケット構造 (RFC 826) ----
+ * - Hardware Type (HTYPE): ハードウェアの種類 (1 = Ethernet)
+ * - Protocol Type (PTYPE): プロトコルの種類 (0x0800 = IPv4)
+ * - Hardware Length (HLEN): MAC アドレスの長さ (6 バイト)
+ * - Protocol Length (PLEN): IP アドレスの長さ (4 バイト)
+ * - Operation (OPER): 1 = ARP Request, 2 = ARP Reply
+ * - Sender Hardware Address (SHA): 送信元 MAC アドレス
+ * - Sender Protocol Address (SPA): 送信元 IP アドレス
+ * - Target Hardware Address (THA): ターゲット MAC アドレス
+ * - Target Protocol Address (TPA): ターゲット IP アドレス
+ *
+ * ---- 主要な ARP の種類 ----
+ * - 通常の ARP: IP → MAC 解決 (Request はブロードキャスト、Reply はユニキャスト)
+ * - Gratuitous ARP: 自身の IP/MAC を通知 (IP 変更、NIC 交換、フェイルオーバー時)
+ * - ARP Probe (DAD): 重複アドレス検出。送信元 IP を 0.0.0.0 にして送信 (RFC 5227)
+ * - Proxy ARP: ルーターが他サブネットの IP に対して自身の MAC で代理応答
+ * - ARP スプーフィング: 偽の ARP Reply でキャッシュを汚染する攻撃手法 (MITM の前段階)
+ *
+ * ---- セキュリティ ----
+ * - ARP には認証機構がないため、スプーフィング (ARP ポイズニング) に脆弱
+ * - Dynamic ARP Inspection (DAI) でスイッチレベルで不正 ARP を検出・破棄可能
+ * - Static ARP エントリはエージングの対象外で、手動管理が必要
+ *
+ * ============================================================
+ *
+ * このモジュールでは以下をシミュレーションする:
+ * - ARP Request/Reply の基本フロー
+ * - ARP キャッシュの管理 (追加・更新・エージング・フラッシュ)
+ * - Gratuitous ARP によるキャッシュ更新通知
+ * - ARP Probe による重複アドレス検出 (DAD: Duplicate Address Detection)
+ * - Proxy ARP による異サブネット代理応答
+ * - ARP スプーフィング攻撃と DAI による防御
  *
  * Ethernet フレームレベルでパケットの送受信を追跡し、
  * 各ホストの ARP テーブルの変化を可視化する。
  */
 
 // ── 基本型 ──
+// ARP シミュレーションで使用する基本的な型エイリアス
 
+/** IPv4 アドレスを表す文字列型 (例: "192.168.1.1") */
 export type IPv4 = string;
+
+/** MAC (Media Access Control) アドレスを表す文字列型 (例: "aa:bb:cc:00:11:22") */
 export type MacAddr = string;
 
 /** ARP オペレーション */

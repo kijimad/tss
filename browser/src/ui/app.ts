@@ -10,7 +10,7 @@ import { resolveStyles } from '../render/style';
 import type { ComputedStyles } from '../render/style';
 import { buildLayoutTree, computeLayout } from '../render/layout';
 import type { LayoutBox } from '../render/layout';
-import { buildDisplayList, paintToCanvas } from '../render/paint';
+import { buildDisplayList } from '../render/paint';
 import type { DomNode, ElementNode } from '../dom/dom';
 
 /** サンプルコード定義 */
@@ -201,6 +201,10 @@ const ACCENT = "#e94560";
  * Node.jsシミュレータと同一のUIパターンで構築する
  */
 export class BrowserApp {
+  /**
+   * アプリケーションを初期化し、UIを構築する
+   * @param container - UIを描画するルートHTML要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:system-ui;background:#0f172a;color:#e2e8f0;";
 
@@ -421,6 +425,7 @@ function formatDomTree(node: DomNode, depth: number): string {
 function formatStyleMap(node: DomNode, styleMap: Map<ElementNode, ComputedStyles>): string {
   const lines: string[] = [];
 
+  /** DOMツリーを再帰的に走査し、各要素のスタイル情報を収集する */
   function walk(n: DomNode, depth: number): void {
     if (n.type === "text") return;
 

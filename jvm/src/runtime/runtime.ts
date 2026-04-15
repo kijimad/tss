@@ -19,24 +19,44 @@
 import type { ClassFile, MethodInfo, ConstantPoolEntry } from "../classfile/types.js";
 import { ConstTag } from "../classfile/types.js";
 
-// JVM の値
+/**
+ * JVMの値を表す型
+ *
+ * JVMのスタックやローカル変数に格納される全ての値の共用体型。
+ * プリミティブ型（int, long, float, double）、文字列、
+ * オブジェクト参照、配列参照、nullを含む。
+ */
 export type JvmValue = number | bigint | string | JvmObject | JvmArray | null;
 
-// オブジェクト（ヒープ上）
+/**
+ * ヒープ上のオブジェクトインスタンスを表すインターフェース
+ *
+ * クラス名とフィールドのマップを保持する。
+ * new命令で生成され、getfield/putfieldでフィールドにアクセスする。
+ */
 export interface JvmObject {
   type: "object";
   className: string;
   fields: Map<string, JvmValue>;
 }
 
-// 配列
+/**
+ * 配列インスタンスを表すインターフェース
+ *
+ * newarray命令で生成され、iaload/iastore等でアクセスする。
+ */
 export interface JvmArray {
   type: "array";
   elementType: string;
   elements: JvmValue[];
 }
 
-// スタックフレーム
+/**
+ * スタックフレームインターフェース
+ *
+ * メソッド呼び出しごとにコールスタックに積まれる実行コンテキスト。
+ * プログラムカウンタ、ローカル変数テーブル、オペランドスタックを持つ。
+ */
 export interface Frame {
   classFile: ClassFile;
   method: MethodInfo;
@@ -45,7 +65,12 @@ export interface Frame {
   operandStack: JvmValue[];      // オペランドスタック
 }
 
-// 実行トレース用イベント
+/**
+ * 実行トレース用イベントの型定義
+ *
+ * インタプリタの実行過程を可視化するためのイベント。
+ * UI側でリアルタイムに実行状況を表示するために使用する。
+ */
 export type JvmEvent =
   | { type: "push"; value: string; stackDepth: number }
   | { type: "pop"; value: string; stackDepth: number }
@@ -57,32 +82,52 @@ export type JvmEvent =
   | { type: "local_set"; index: number; value: string }
   | { type: "local_get"; index: number; value: string };
 
-// JVM ランタイム
+/**
+ * JVMランタイムクラス
+ *
+ * クラスのロード、メソッド呼び出し、スタック操作、
+ * コンスタントプール解決など、JVM実行環境の中核を担う。
+ * インタプリタ（interpreter.ts）がこのランタイムを操作して
+ * バイトコードを実行する。
+ */
 export class JvmRuntime {
-  // ロードされたクラス
+  /** ロードされたクラスの名前→ClassFileマップ */
   readonly classes = new Map<string, ClassFile>();
-  // コールスタック（フレームの配列）
+  /** コールスタック（フレームの配列、末尾が現在のフレーム） */
   readonly callStack: Frame[] = [];
-  // 標準出力バッファ
+  /** 標準出力バッファ（System.out.printlnの出力先） */
   stdout = "";
-  // 実行イベント
+  /** 実行トレースイベントの記録 */
   events: JvmEvent[] = [];
-  // イベントコールバック
+  /** イベント発生時のコールバック関数 */
   onEvent: ((event: JvmEvent) => void) | undefined;
-  // 実行サイクル数
+  /** 累計実行サイクル数 */
   cycles = 0;
 
+  /**
+   * イベントを記録し、コールバックに通知する
+   * @param event - 発生したイベント
+   */
   emit(event: JvmEvent): void {
     this.events.push(event);
     this.onEvent?.(event);
   }
 
-  // クラスをロード
+  /**
+   * クラスファイルをランタイムにロードする
+   * @param classFile - ロードするクラスファイル
+   */
   loadClass(classFile: ClassFile): void {
     this.classes.set(classFile.thisClass, classFile);
   }
 
-  // メソッドを検索
+  /**
+   * 指定されたクラスからメソッドを検索する
+   * @param className - クラスの完全修飾名
+   * @param methodName - メソッド名
+   * @param descriptor - メソッドディスクリプタ
+   * @returns クラスファイルとメソッド情報のペア、見つからない場合undefined
+   */
   findMethod(className: string, methodName: string, descriptor: string): { classFile: ClassFile; method: MethodInfo } | undefined {
     const cf = this.classes.get(className);
     if (cf === undefined) return undefined;
@@ -91,7 +136,16 @@ export class JvmRuntime {
     return { classFile: cf, method };
   }
 
-  // メソッドを呼び出し（フレームを作ってスタックに積む）
+  /**
+   * メソッドを呼び出す（新しいフレームを作成しコールスタックに積む）
+   *
+   * 引数をローカル変数テーブルにコピーし、
+   * 新しいスタックフレームを生成してコールスタックにプッシュする。
+   *
+   * @param classFile - メソッドが属するクラスファイル
+   * @param method - 呼び出すメソッド情報
+   * @param args - メソッドに渡す引数の配列
+   */
   invokeMethod(classFile: ClassFile, method: MethodInfo, args: JvmValue[]): void {
     if (method.code === undefined) return;
 
@@ -113,7 +167,10 @@ export class JvmRuntime {
     this.callStack.push(frame);
   }
 
-  // 現在のフレーム
+  /**
+   * 現在実行中のフレーム（コールスタックの先頭）を取得する
+   * @returns 現在のフレーム、コールスタックが空の場合undefined
+   */
   currentFrame(): Frame | undefined {
     return this.callStack[this.callStack.length - 1];
   }

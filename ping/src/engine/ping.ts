@@ -12,6 +12,7 @@
 
 // ── 基本型 ──
 
+/** IPv4 アドレスを表す文字列型 */
 export type IPv4 = string;
 
 /** ICMP メッセージタイプ */
@@ -207,13 +208,30 @@ export interface PingEvent {
 
 // ── ユーティリティ ──
 
-/** ジッター付き遅延を計算する */
+/**
+ * ジッター付き遅延を計算する
+ *
+ * 基本遅延にランダムな変動を加え、実際のネットワーク遅延を模倣する。
+ * 変動幅は base * jitter で決まり、-1.0〜+1.0 の範囲でランダムに分布する。
+ *
+ * @param base - 基本遅延 (ms)
+ * @param jitter - ジッター係数 (0.0〜1.0)
+ * @returns ジッター適用後の遅延 (ms)。0 未満にはならない。
+ */
 export function jitteredDelay(base: number, jitter: number): number {
   const variation = base * jitter * (Math.random() * 2 - 1);
   return Math.max(0, base + variation);
 }
 
-/** IP チェックサムを簡易計算する (教育用) */
+/**
+ * ICMP チェックサムを簡易計算する (教育用)
+ *
+ * 実際の ICMP チェックサム計算を簡略化したもの。
+ * パケットの主要フィールドを合算し、1 の補数を返す。
+ *
+ * @param packet - チェックサム計算対象の ICMP パケット
+ * @returns 16 ビットのチェックサム値
+ */
 export function icmpChecksum(packet: IcmpPacket): number {
   let sum = 0;
   sum += (packet.type === "echo-request" ? 8 : 0) << 8;
@@ -226,7 +244,16 @@ export function icmpChecksum(packet: IcmpPacket): number {
   return (~sum) & 0xffff;
 }
 
-/** 統計を計算する */
+/**
+ * ping 応答結果から統計情報を計算する
+ *
+ * 成功した応答の RTT から最小・最大・平均・標準偏差を算出し、
+ * パケットロス率とともに PingStats オブジェクトとして返す。
+ *
+ * @param replies - ping 応答結果の配列
+ * @param transmitted - 送信したパケット総数
+ * @returns 集計された統計情報
+ */
 export function calculateStats(replies: PingReply[], transmitted: number): PingStats {
   const received = replies.filter((r) => r.success).length;
   const rtts = replies.filter((r) => r.success).map((r) => r.rtt);
@@ -245,7 +272,17 @@ export function calculateStats(replies: PingReply[], transmitted: number): PingS
 
 // ── 経路探索 ──
 
-/** トポロジーから送信元→宛先の経路 (ノード名リスト) を見つける */
+/**
+ * トポロジーから送信元→宛先の最短経路 (ノード名リスト) を BFS で探索する
+ *
+ * リンクの重み (遅延) は考慮せず、ホップ数が最小の経路を返す。
+ * 到達不能な場合は undefined を返す。
+ *
+ * @param topo - ネットワークトポロジー
+ * @param srcName - 送信元ノード名
+ * @param dstName - 宛先ノード名
+ * @returns ノード名の配列 (送信元→宛先)、または到達不能時は undefined
+ */
 export function findRoute(topo: Topology, srcName: string, dstName: string): string[] | undefined {
   // BFS でノード名の経路を探索
   const allNodes = new Set<string>([
@@ -279,7 +316,16 @@ export function findRoute(topo: Topology, srcName: string, dstName: string): str
   return undefined;
 }
 
-/** ノード名から IP を取得する */
+/**
+ * ノード名から IP アドレスを取得する
+ *
+ * ホストの場合はインターフェースの IP、ルーターの場合は最初のインターフェースの IP を返す。
+ * 見つからない場合は "0.0.0.0" を返す。
+ *
+ * @param topo - ネットワークトポロジー
+ * @param name - ノード名
+ * @returns ノードの IP アドレス
+ */
 export function nodeIp(topo: Topology, name: string): IPv4 {
   const host = topo.hosts.find((h) => h.name === name);
   if (host) return host.iface.ip;
@@ -288,12 +334,30 @@ export function nodeIp(topo: Topology, name: string): IPv4 {
   return "0.0.0.0";
 }
 
-/** 2 ノード間のリンクを取得する */
+/**
+ * 2 ノード間のリンクを取得する
+ *
+ * リンクは双方向として扱い、from/to の順序を問わず検索する。
+ *
+ * @param topo - ネットワークトポロジー
+ * @param a - ノード名 A
+ * @param b - ノード名 B
+ * @returns リンク情報。存在しない場合は undefined
+ */
 export function getLink(topo: Topology, a: string, b: string): Link | undefined {
   return topo.links.find((l) => (l.from === a && l.to === b) || (l.from === b && l.to === a));
 }
 
-/** ノードの MTU を取得する */
+/**
+ * ノードの MTU (最大転送単位) を取得する
+ *
+ * ホストの場合はインターフェースの MTU、ルーターの場合は
+ * 全インターフェースの最小 MTU を返す。見つからない場合はデフォルト 1500。
+ *
+ * @param topo - ネットワークトポロジー
+ * @param name - ノード名
+ * @returns MTU 値 (bytes)
+ */
 export function nodeMtu(topo: Topology, name: string): number {
   const host = topo.hosts.find((h) => h.name === name);
   if (host) return host.iface.mtu;
@@ -304,14 +368,35 @@ export function nodeMtu(topo: Topology, name: string): number {
 
 // ── Ping シミュレーター ──
 
+/**
+ * ICMP Ping シミュレーター
+ *
+ * 仮想ネットワークトポロジー上で ping と traceroute を実行する。
+ * パケットの送信・転送・ロス・TTL 減算・MTU チェック・応答を
+ * ステップごとにシミュレーションし、イベントログと統計を生成する。
+ */
 export class PingSimulator {
+  /** シミュレーション対象のネットワークトポロジー */
   private topo: Topology;
 
+  /**
+   * PingSimulator のインスタンスを生成する
+   * @param topo - シミュレーション対象のネットワークトポロジー
+   */
   constructor(topo: Topology) {
     this.topo = topo;
   }
 
-  /** ping を実行する */
+  /**
+   * ping を実行する
+   *
+   * 指定された設定に基づき、送信元から宛先へ ICMP Echo Request を送信し、
+   * 応答結果・統計・イベントログを返す。経路が見つからない場合は全パケットが
+   * Destination Unreachable となる。
+   *
+   * @param config - ping の設定 (送信元、宛先、回数、TTL など)
+   * @returns ping の実行結果 (応答一覧、統計、イベント)
+   */
   ping(config: PingConfig): PingResult {
     const events: PingEvent[] = [];
     const replies: PingReply[] = [];
@@ -352,7 +437,15 @@ export class PingSimulator {
     return { replies, stats, events };
   }
 
-  /** traceroute を実行する */
+  /**
+   * traceroute を実行する
+   *
+   * TTL を 1 から順に増やしながらプローブを送信し、各ホップのルーター情報と
+   * RTT を収集する。宛先に到達するか maxHops に達するまで繰り返す。
+   *
+   * @param config - traceroute の設定 (送信元、宛先、最大ホップ数など)
+   * @returns traceroute の実行結果 (ホップ一覧、イベント、到達可否)
+   */
   traceroute(config: TracerouteConfig): TracerouteResult {
     const events: PingEvent[] = [];
     const hops: TracerouteHop[] = [];
@@ -407,7 +500,20 @@ export class PingSimulator {
     return { hops, events, reached };
   }
 
-  /** 1 回の Echo Request を送信してレスポンスを得る */
+  /**
+   * 1 回の ICMP Echo Request を送信してレスポンスを得る
+   *
+   * 往路では各ホップでリンクロス・ルータードロップ・MTU チェック・TTL 減算を行い、
+   * 宛先到達後は復路の遅延とロスも考慮して最終的な RTT を算出する。
+   * Record Route オプションが有効な場合、経由した IP を記録する。
+   *
+   * @param config - ping の設定
+   * @param route - 送信元から宛先までのノード名リスト
+   * @param seq - シーケンス番号
+   * @param startTime - 送信開始時刻 (ms)
+   * @param events - イベントログの追記先
+   * @returns 1 回分の ping 応答結果
+   */
   private sendEcho(
     config: PingConfig, route: string[], seq: number, startTime: number, events: PingEvent[],
   ): PingReply {
@@ -547,7 +653,19 @@ export class PingSimulator {
     };
   }
 
-  /** traceroute 用のプローブ送信 */
+  /**
+   * traceroute 用のプローブを 1 回送信する
+   *
+   * 指定された TTL でパケットを送信し、TTL=0 となるノードまたは
+   * 宛先ノードからの応答を取得する。復路の遅延は往路と同程度として簡略化。
+   *
+   * @param _config - traceroute の設定 (現在は直接参照しないが将来拡張用)
+   * @param route - 送信元から宛先までのノード名リスト
+   * @param ttl - プローブの TTL 値
+   * @param startTime - 送信開始時刻 (ms)
+   * @param events - イベントログの追記先
+   * @returns 応答元の IP・ノード名・RTT (応答なしの場合は空文字列と rtt=-1)
+   */
   private sendProbe(
     _config: TracerouteConfig, route: string[], ttl: number, startTime: number, events: PingEvent[],
   ): { respondIp: string; respondName: string; rtt: number } {
@@ -597,7 +715,16 @@ export class PingSimulator {
 
 // ── プリセット用トポロジー構築 ──
 
-/** 簡単なホストを作成する */
+/**
+ * エンドホストノードを簡易作成するヘルパー関数
+ *
+ * MAC アドレスは IP アドレスから自動生成される。
+ *
+ * @param name - ホスト名
+ * @param ip - ホストの IP アドレス
+ * @param opts - オプション設定 (応答可否、応答遅延、初期 TTL、MTU)
+ * @returns HostNode オブジェクト
+ */
 export function host(name: string, ip: IPv4, opts?: { reply?: boolean; delay?: number; ttl?: number; mtu?: number }): HostNode {
   return {
     name, iface: { ip, mac: `02:00:${ip.split(".").map((o) => parseInt(o).toString(16).padStart(2, "0")).join(":")}`, mtu: opts?.mtu ?? 1500 },
@@ -605,7 +732,17 @@ export function host(name: string, ip: IPv4, opts?: { reply?: boolean; delay?: n
   };
 }
 
-/** ルーターを作成する */
+/**
+ * ルーターノードを簡易作成するヘルパー関数
+ *
+ * 複数の IP アドレスを持つインターフェースを生成する。
+ * MAC アドレスは各 IP から自動生成される。
+ *
+ * @param name - ルーター名
+ * @param ips - 各インターフェースの IP アドレス
+ * @param opts - オプション設定 (転送遅延、ジッター、ドロップ率、ICMP 可否、MTU)
+ * @returns RouterNode オブジェクト
+ */
 export function router(name: string, ips: IPv4[], opts?: { delay?: number; jitter?: number; drop?: number; icmp?: boolean; mtu?: number }): RouterNode {
   return {
     name,
@@ -615,7 +752,15 @@ export function router(name: string, ips: IPv4[], opts?: { delay?: number; jitte
   };
 }
 
-/** リンクを作成する */
+/**
+ * ネットワークリンクを簡易作成するヘルパー関数
+ *
+ * @param from - 始点ノード名
+ * @param to - 終点ノード名
+ * @param latency - 片道遅延 (ms)
+ * @param opts - オプション設定 (パケットロス率、混雑遅延)
+ * @returns Link オブジェクト
+ */
 export function link(from: string, to: string, latency: number, opts?: { loss?: number; congestion?: number }): Link {
   return { from, to, latency, lossRate: opts?.loss ?? 0, congestionDelay: opts?.congestion ?? 0 };
 }

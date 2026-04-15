@@ -57,26 +57,50 @@ export function isPrime(n: number): boolean {
 
 // ── 鍵ペア ──
 
+/**
+ * RSA 公開鍵を表すインターフェース
+ * 公開指数 e と法 n のペアで構成される
+ */
 export interface RsaPublicKey {
-  e: number; // 公開指数
-  n: number; // 法 (p * q)
+  /** 公開指数 — 暗号化および署名検証に使用 */
+  e: number;
+  /** 法 (p * q) — 公開鍵と秘密鍵で共有される */
+  n: number;
 }
 
+/**
+ * RSA 秘密鍵を表すインターフェース
+ * 秘密指数 d と素因数 p, q を保持する
+ */
 export interface RsaPrivateKey {
-  d: number; // 秘密指数
-  n: number; // 法
-  p: number; // 素因数1
-  q: number; // 素因数2
+  /** 秘密指数 — 復号および署名生成に使用 */
+  d: number;
+  /** 法 (p * q) */
+  n: number;
+  /** 素因数1 */
+  p: number;
+  /** 素因数2 */
+  q: number;
 }
 
+/**
+ * RSA 鍵ペア — 公開鍵と秘密鍵の組み合わせ
+ */
 export interface RsaKeyPair {
+  /** 公開鍵 — 暗号化と署名検証に使用 */
   publicKey: RsaPublicKey;
+  /** 秘密鍵 — 復号と署名生成に使用 */
   privateKey: RsaPrivateKey;
 }
 
 // ── トレース ──
 
+/**
+ * シミュレーションの各ステップを記録するトレース情報
+ * UIでの操作履歴表示に使用される
+ */
 export interface SigningTrace {
+  /** 処理のフェーズ — UIでの色分け表示に対応 */
   phase:
     | "keygen"      // 鍵生成
     | "encrypt"     // 暗号化
@@ -87,6 +111,7 @@ export interface SigningTrace {
     | "tamper"      // 改ざん
     | "math"        // 数学的計算
     | "result";     // 結果
+  /** トレースの詳細メッセージ */
   detail: string;
 }
 
@@ -104,6 +129,19 @@ export function simpleHash(message: string, mod: number): number {
 
 // ── エンジン ──
 
+/**
+ * 公開鍵暗号・デジタル署名シミュレーションエンジン
+ *
+ * 簡易 RSA を用いて以下の操作を提供する:
+ * - 鍵ペア生成 (generateKeyPair)
+ * - 暗号化 / 復号 (encrypt / decrypt)
+ * - メッセージ単位の暗号化 / 復号 (encryptMessage / decryptMessage)
+ * - 署名 / 検証 (sign / verify)
+ * - 改ざんシミュレーション (tamperAndVerify)
+ *
+ * 各メソッドは処理結果とともにトレース情報を返し、
+ * UIで計算過程をステップごとに可視化できる。
+ */
 export class SigningEngine {
   /** RSA 鍵ペアを生成する */
   generateKeyPair(p: number, q: number): { keyPair: RsaKeyPair; trace: SigningTrace[] } {

@@ -1,0 +1,8 @@
+{
+  "name": "modem-onu-sim",
+  "version": "1.0.0",
+  "description": "モデム・ONU シミュレーター — 変調/復調、ADSL、QAM、PON、GPON、光信号",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "test": "vitest run", "test:watch": "vitest" },
+  "devDependencies": { "typescript": "^6.0.2", "vite": "^8.0.2", "vitest": "^4.1.1" }
+}

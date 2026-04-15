@@ -1,3 +1,10 @@
+/**
+ * app.ts -- Docker シミュレーターの UI モジュール
+ *
+ * ブラウザ上でターミナル風のインターフェースを提供し、
+ * Docker コマンドの入力・実行・結果表示を行う。
+ * サイドバーにはコンテナ一覧とエンジンイベントログを表示する。
+ */
 import { DockerEngine, type EngineEvent, type Container, ContainerState } from "../engine/engine.js";
 import type { BuildEvent } from "../image/image.js";
 
@@ -43,18 +50,38 @@ export const EXAMPLES: Example[] = [
   },
 ];
 
+/**
+ * Docker シミュレーターアプリケーションのメインクラス。
+ * ターミナルUI、サイドバー、キーボード入力処理、コマンド実行を管理する。
+ */
 export class DockerApp {
+  /** Docker エンジンのインスタンス */
   private engine!: DockerEngine;
+  /** ターミナル出力領域の DOM 要素 */
   private termDiv!: HTMLElement;
+  /** コンテナ一覧表示領域の DOM 要素 */
   private containersDiv!: HTMLElement;
+  /** イベントログ表示領域の DOM 要素 */
   private eventsDiv!: HTMLElement;
+  /** 現在の入力行テキスト */
   private inputLine = "";
+  /** コマンド履歴 */
   private history: string[] = [];
+  /** 履歴の現在位置（上下キーでナビゲート） */
   private historyIdx = -1;
+  /** 現在の入力テキストを表示する span 要素 */
   private currentInputSpan: HTMLSpanElement | null = null;
+  /** カーソル表示用の span 要素 */
   private currentCursor: HTMLSpanElement | null = null;
+  /** 現在のプロンプト行の div 要素 */
   private currentPromptLine: HTMLDivElement | null = null;
 
+  /**
+   * アプリケーションを初期化し、指定されたコンテナ要素内に UI を構築する。
+   * ヘッダー（タイトル、サンプル選択）、ターミナル、サイドバーを配置し、
+   * キーボードイベントリスナーを設定する。
+   * @param container - UI を描画するルート HTML 要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Cascadia Code',monospace;background:#0c0c0c;color:#e0e0e0;";
 
@@ -167,6 +194,12 @@ export class DockerApp {
     this.termDiv.focus();
   }
 
+  /**
+   * キーボード入力を処理する。
+   * Enter でコマンド実行、Backspace で文字削除、上下キーで履歴ナビゲーション、
+   * Ctrl+L でターミナルクリアを行う。
+   * @param e - キーボードイベント
+   */
   private handleKey(e: KeyboardEvent): void {
     if (e.isComposing) return; e.preventDefault(); e.stopPropagation();
     if (e.key === "Enter") {
@@ -182,6 +215,12 @@ export class DockerApp {
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { this.inputLine += e.key; this.updateInput(); }
   }
 
+  /**
+   * ユーザーが入力したコマンドを解析・実行する。
+   * "docker" で始まるコマンドはサブコマンド（pull, build, run, exec, ps, stop, rm, images, inspect）に分岐し、
+   * "help" でヘルプ表示、"clear" でターミナルクリアを行う。
+   * @param input - ユーザーが入力したコマンド文字列
+   */
   private execute(input: string): void {
     if (!input) return;
     const args = input.split(/\s+/);
@@ -278,6 +317,7 @@ export class DockerApp {
     }
   }
 
+  /** ヘルプメッセージをターミナルに表示する */
   private showHelp(): void {
     this.appendText("Docker commands:\n");
     for (const [c, d] of [
@@ -297,6 +337,7 @@ export class DockerApp {
     this.appendText("\nContainer exec commands: echo, cat, ls, pwd, hostname, env, whoami, ps, ip\n", "#64748b");
   }
 
+  /** ターミナルに新しいプロンプト行（"$ "）を表示し、入力を受け付ける状態にする */
   private showPrompt(): void {
     const line = document.createElement("div"); line.style.cssText = "display:flex;white-space:pre;";
     const ps = document.createElement("span"); ps.style.cssText = "color:#2496ED;"; ps.textContent = "$ ";
@@ -309,8 +350,15 @@ export class DockerApp {
     this.termDiv.scrollTop = this.termDiv.scrollHeight;
   }
 
+  /** 入力スパンの表示テキストを現在の inputLine に同期する */
   private updateInput(): void { if (this.currentInputSpan) this.currentInputSpan.textContent = this.inputLine; this.termDiv.scrollTop = this.termDiv.scrollHeight; }
 
+  /**
+   * ターミナルにテキストを追加表示する。
+   * プロンプト行が存在する場合、その前に挿入される。
+   * @param text - 表示するテキスト
+   * @param color - テキストの色（CSSカラー値、デフォルト: "#e0e0e0"）
+   */
   private appendText(text: string, color = "#e0e0e0"): void {
     const span = document.createElement("span"); span.style.cssText = `white-space:pre-wrap;color:${color};`; span.textContent = text;
     if (this.currentPromptLine) this.termDiv.insertBefore(span, this.currentPromptLine);
@@ -318,6 +366,7 @@ export class DockerApp {
     this.termDiv.scrollTop = this.termDiv.scrollHeight;
   }
 
+  /** サイドバーのコンテナ一覧を最新の状態に更新する */
   private updateContainers(): void {
     this.containersDiv.innerHTML = "";
     for (const c of this.engine.ps(true)) {
@@ -332,6 +381,11 @@ export class DockerApp {
     }
   }
 
+  /**
+   * エンジンイベントをサイドバーのイベントログに追加表示する。
+   * イベントの種類に応じた色分けを行う。
+   * @param event - 表示するエンジンイベント
+   */
   private addEvent(event: EngineEvent): void {
     const row = document.createElement("div");
     const colors: Record<string, string> = {
@@ -348,6 +402,11 @@ export class DockerApp {
   }
 }
 
+/**
+ * エンジンイベントを表示用の短い文字列にフォーマットする。
+ * @param e - フォーマットするエンジンイベント
+ * @returns フォーマットされた文字列
+ */
 function formatEvent(e: EngineEvent): string {
   switch (e.type) {
     case "image_pull": return `pull ${e.name}`;
@@ -366,6 +425,7 @@ function formatEvent(e: EngineEvent): string {
   }
 }
 
+/** サンプル Dockerfile のプリセット定義（docker build コマンドで使用） */
 const SAMPLE_DOCKERFILES: Record<string, string> = {
   "node-app": `FROM node:20
 WORKDIR /app
@@ -387,6 +447,7 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]`,
 };
 
+/** サンプルビルドコンテキスト（COPY 命令で使用されるファイル群） */
 const SAMPLE_CONTEXTS: Record<string, Map<string, string>> = {
   "node-app": new Map([
     ["package.json", '{"name":"my-app","version":"1.0.0","dependencies":{"express":"^4.18.0"}}'],

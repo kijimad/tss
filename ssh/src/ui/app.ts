@@ -1,3 +1,11 @@
+/**
+ * app.ts -- SSH シミュレータの UI モジュール
+ *
+ * ブラウザ上でターミナル風のインターフェースを提供し、
+ * SSH 接続のプロトコルトレースをリアルタイムで可視化する。
+ * セレクトボックスからプリセット接続設定を選択し、
+ * パスワード認証・公開鍵認証によるSSH接続を体験できる。
+ */
 import { SshServer, SshSession, type SshEvent } from "../protocol/ssh.js";
 import { generateKeyPair } from "../crypto/crypto.js";
 
@@ -16,18 +24,42 @@ export const EXAMPLES: SshExample[] = [
   { label: "別ユーザー", host: "root@192.168.1.1", password: "toor", authType: "password" },
 ];
 
+/**
+ * SSH シミュレータのメインアプリケーションクラス
+ *
+ * ターミナルエミュレータ、プロトコルトレース表示、接続フォーム、
+ * コマンド入力・履歴管理をすべて管理する。
+ */
 export class SshApp {
+  /** 現在のSSHセッション（未接続時はundefined） */
   private session: SshSession | undefined;
+  /** エミュレート対象のSSHサーバ */
   private server!: SshServer;
+  /** ターミナル表示領域のDOM要素 */
   private termDiv!: HTMLElement;
+  /** プロトコルトレース表示領域のDOM要素 */
   private protoDiv!: HTMLElement;
+  /** 現在の入力行テキスト */
   private inputLine = "";
+  /** コマンド入力履歴 */
   private history: string[] = [];
+  /** 履歴の現在位置インデックス */
   private historyIdx = -1;
+  /** 現在の入力テキストを表示するspan要素 */
   private currentInputSpan: HTMLSpanElement | null = null;
+  /** 点滅カーソルのspan要素 */
   private currentCursor: HTMLSpanElement | null = null;
+  /** 現在のプロンプト行のdiv要素 */
   private currentPromptLine: HTMLDivElement | null = null;
 
+  /**
+   * アプリケーションを初期化し、UIをコンテナ要素内に構築する
+   *
+   * ヘッダー（サンプル選択、接続フォーム）、ターミナル領域、
+   * プロトコルトレースサイドバーを生成し、イベントリスナーを設定する。
+   *
+   * @param container - UIを描画する親HTML要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Cascadia Code',monospace;background:#0c0c0c;color:#e0e0e0;";
 
@@ -111,6 +143,16 @@ export class SshApp {
     this.termDiv.addEventListener("click", () => this.termDiv.focus());
   }
 
+  /**
+   * SSH 接続を実行する
+   *
+   * セッションを作成し、ハンドシェイクを実行して接続結果をターミナルに表示する。
+   *
+   * @param username - 接続ユーザ名
+   * @param method - 認証方式
+   * @param credential - パスワードまたは公開鍵
+   * @param keyPair - 公開鍵認証時の鍵ペア（省略可）
+   */
   private doConnect(username: string, method: "password" | "publickey", credential: string, keyPair?: ReturnType<typeof generateKeyPair>): void {
     this.protoDiv.innerHTML = "";
     this.session = new SshSession(this.server);
@@ -128,6 +170,12 @@ export class SshApp {
     }
   }
 
+  /**
+   * キーボード入力を処理する
+   *
+   * Enter: コマンド実行、Backspace: 文字削除、
+   * 上下矢印: 履歴ナビゲーション、通常文字: 入力追加
+   */
   private handleKey(e: KeyboardEvent): void {
     if (e.isComposing) return; e.preventDefault(); e.stopPropagation();
     if (e.key === "Enter") {
@@ -158,7 +206,9 @@ export class SshApp {
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { this.inputLine += e.key; this.updateInput(); }
   }
 
+  /** ローカルシェルのプロンプトを表示する */
   private showLocalPrompt(): void { this.showPrompt("local$ ", "#94a3b8"); }
+  /** リモートサーバのプロンプトを表示する */
   private showRemotePrompt(): void {
     const u = this.session?.getUsername() ?? "user";
     const h = this.session?.getHostname() ?? "host";

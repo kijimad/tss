@@ -1,30 +1,55 @@
 /**
  * parser.ts — アセンブリソースの字句・構文解析
+ *
+ * アセンブラの最初の処理段階であるパーサ（構文解析器）を実装する。
+ * ソーステキストを1行ずつ走査し、以下の要素を抽出する:
+ *   - ラベル定義 (例: "loop:", "_start:")
+ *   - ニーモニック（オペコード） (例: "mov", "add", "jmp")
+ *   - オペランド (例: "rax", "42", "[rsp]", "loop")
+ *   - コメント (セミコロン ";" 以降)
+ *
+ * パーサはアセンブルの2パス処理のうち、両パスの前段階として
+ * ソースコードを構造化データ (Instruction[]) に変換する役割を担う。
+ *
+ * x86/x86-64 のアセンブリ構文（Intel記法）:
+ *   [ラベル:] ニーモニック オペランド1 [, オペランド2] [; コメント]
  */
 
 import type { Instruction, Operand, OperandType, Opcode } from "./types.js";
 
-/** 有効なオペコード一覧 */
+/**
+ * 有効なオペコード（ニーモニック）一覧
+ *
+ * このシミュレータがサポートする全命令セットをSetで管理する。
+ * パース時にトークンがこのSetに含まれるかで、有効な命令かどうかを判定する。
+ * 含まれないトークンは「不明な命令」としてエラー報告される。
+ */
 const VALID_OPCODES = new Set<string>([
-  "mov", "add", "sub", "mul", "imul", "div", "idiv",
-  "and", "or",  "xor", "not", "shl", "shr", "sar",
-  "cmp", "test",
-  "jmp", "je",  "jne", "jg",  "jge", "jl",  "jle", "jz", "jnz",
-  "push", "pop",
-  "call", "ret",
-  "inc", "dec", "neg",
-  "lea",
-  "nop", "int", "syscall", "hlt",
+  /* データ転送 */      "mov", "lea", "push", "pop",
+  /* 算術演算 */        "add", "sub", "mul", "imul", "div", "idiv", "inc", "dec", "neg",
+  /* 論理演算 */        "and", "or",  "xor", "not",
+  /* シフト演算 */      "shl", "shr", "sar",
+  /* 比較・テスト */    "cmp", "test",
+  /* 無条件分岐 */      "jmp",
+  /* 条件分岐 */        "je",  "jne", "jg",  "jge", "jl",  "jle", "jz", "jnz",
+  /* 関数呼び出し */    "call", "ret",
+  /* システム・制御 */  "nop", "int", "syscall", "hlt",
 ]);
 
-/** レジスタ名の集合 */
+/**
+ * レジスタ名の集合
+ *
+ * x86-64 の全汎用レジスタ名を小文字で保持する。
+ * オペランド解析時に、トークンがレジスタ名かどうかの判定に使用する。
+ * 大文字・小文字の区別なく処理するため、比較時に toLowerCase() を適用する。
+ */
 const REGISTERS = new Set<string>([
-  "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rsp", "rbp",
-  "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
-  "eax", "ebx", "ecx", "edx", "esi", "edi", "esp", "ebp",
-  "ax",  "bx",  "cx",  "dx",
-  "al",  "bl",  "cl",  "dl",
-  "ah",  "bh",  "ch",  "dh",
+  /* 64bit 汎用レジスタ */    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rsp", "rbp",
+  /* 64bit 拡張レジスタ */    "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
+  /* 32bit レジスタ */        "eax", "ebx", "ecx", "edx", "esi", "edi", "esp", "ebp",
+  /* 16bit レジスタ */        "ax",  "bx",  "cx",  "dx",
+  /* 8bit 下位レジスタ */     "al",  "bl",  "cl",  "dl",
+  /* 8bit 上位レジスタ */     "ah",  "bh",  "ch",  "dh",
 ]);
 
 /** オペランドの種別を判定してパースする */

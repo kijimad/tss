@@ -1,128 +1,240 @@
 /**
  * nginx.ts — Nginx シミュレーションエンジン
  *
- * server ブロック → location マッチング → ディレクティブ実行 の
- * リクエスト処理パイプラインを再現する。
+ * Nginx はイベント駆動型のWebサーバー/リバースプロキシであり、
+ * マスター・ワーカー プロセスモデルとノンブロッキングI/O（epoll/kqueue）を
+ * 用いて高い並行接続性能を実現する。
+ *
+ * このモジュールでは、Nginx のリクエスト処理パイプラインを再現する:
+ *   1. 接続受付 (accept)
+ *   2. server ブロック選択 — Host ヘッダ（バーチャルホスト）によるマッチ
+ *   3. location ブロック選択 — URI パスのマッチング（完全一致/プレフィックス/正規表現）
+ *   4. ディレクティブ実行 — return / proxy_pass / 静的ファイル配信 など
+ *   5. レスポンス生成
+ *
+ * 外部ネットワークや物理現象（バックエンド応答、ファイルI/O）は
+ * すべてコード内でエミュレートしている。
  */
 
 // ── location マッチ種別 (Nginx の優先順位順) ──
+// Nginx は location ディレクティブに対して以下の優先順位でマッチングを行う:
+//   1. exact (=)           — URI が完全一致すれば即座に確定（最高優先）
+//   2. prefix_priority (^~) — 最長プレフィックス一致で、正規表現評価をスキップ
+//   3. regex (~ / ~*)       — 設定ファイル記載順で最初にマッチした正規表現を採用
+//   4. prefix (なし)        — 最長プレフィックス一致（正規表現に負ける）
 
 export type LocationMatch =
-  | { type: "exact"; path: string }        // = /path
-  | { type: "prefix_priority"; path: string } // ^~ /path
-  | { type: "regex"; pattern: string }     // ~ or ~*
-  | { type: "prefix"; path: string };      // /path
+  | { type: "exact"; path: string }        // = /path  — 完全一致
+  | { type: "prefix_priority"; path: string } // ^~ /path — 優先プレフィックス一致
+  | { type: "regex"; pattern: string }     // ~ or ~* — 正規表現一致（~* は大文字小文字無視）
+  | { type: "prefix"; path: string };      // /path   — 通常のプレフィックス一致
 
-/** upstream バックエンド */
+/**
+ * upstream バックエンド — 個々のバックエンドサーバーを表す。
+ * Nginx の upstream ブロック内で `server` ディレクティブとして定義される。
+ * weight はトラフィック配分比率に影響し、healthy フラグでヘルスチェック状態を管理する。
+ */
 export interface UpstreamServer {
+  /** バックエンドサーバーのアドレス（例: "10.0.1.1:8080"） */
   address: string;
+  /** 重み付け — 値が大きいほど多くのリクエストが振り分けられる */
   weight: number;
+  /** ヘルスチェック状態 — false の場合、ロードバランサーはこのサーバーをスキップする */
   healthy: boolean;
 }
 
-/** upstream グループ */
+/**
+ * upstream グループ — Nginx のロードバランシング設定を表す。
+ * upstream ブロックは複数のバックエンドサーバーをグループ化し、
+ * proxy_pass から参照される名前付きバックエンドプールを構成する。
+ *
+ * 負荷分散アルゴリズム:
+ *   - round-robin: リクエストを順番に各サーバーへ振り分ける（デフォルト）
+ *   - least-conn:  アクティブ接続数が最も少ないサーバーを選択する
+ *   - ip-hash:     クライアントIPのハッシュ値で固定サーバーに振り分ける（セッション維持）
+ */
 export interface Upstream {
+  /** upstream ブロック名 — proxy_pass で "http://<name>" として参照される */
   name: string;
+  /** 負荷分散アルゴリズムの種別 */
   method: "round-robin" | "least-conn" | "ip-hash";
+  /** バックエンドサーバーの一覧 */
   servers: UpstreamServer[];
-  /** ラウンドロビン用カウンタ */
+  /** ラウンドロビン用の内部カウンタ — 次に使用するサーバーのインデックスを追跡する */
   _rrIndex?: number;
 }
 
-/** location ブロックのディレクティブ */
+/**
+ * location ブロックのディレクティブ — Nginx の各 location ブロック内で
+ * 設定可能なディレクティブ群。リクエスト処理の方法を決定する。
+ *
+ * 処理の優先順位: return → proxy_pass → root（静的ファイル）
+ */
 export interface LocationDirectives {
-  /** 静的ファイル配信 */
+  /** root ディレクティブ — 静的ファイルのドキュメントルートパスを指定する */
   root?: string;
+  /** index ディレクティブ — ディレクトリアクセス時のデフォルトファイル名（例: "index.html"） */
   index?: string;
-  /** リバースプロキシ */
+  /** proxy_pass ディレクティブ — リバースプロキシ先のURL。upstream 名または直接URLを指定する */
   proxyPass?: string;
-  /** リダイレクト */
+  /** return ディレクティブ — 指定したHTTPステータスコードを即座に返す（リダイレクト等に使用） */
   returnCode?: number;
+  /** return ディレクティブのボディ — レスポンス本文またはリダイレクト先URL */
   returnBody?: string;
-  /** ヘッダ追加 */
+  /** add_header ディレクティブ — レスポンスに追加するカスタムHTTPヘッダ */
   addHeaders?: Record<string, string>;
-  /** レスポンスの型 */
+  /** try_files ディレクティブ — 指定した順序でファイルを探索し、最初に見つかったものを返す */
   tryFiles?: string[];
-  /** キャッシュ設定 */
+  /** expires ディレクティブ — Cache-Control ヘッダの max-age 値を設定する（秒数） */
   expires?: string;
-  /** レート制限 */
+  /** limit_req ディレクティブ — レート制限ゾーンを指定してリクエスト数を制御する */
   limitReq?: string;
 }
 
-/** location ブロック */
+/**
+ * location ブロック — URI パスのマッチ条件とそのブロック内のディレクティブを保持する。
+ * Nginx の設定ファイルにおける `location [修飾子] <パス> { ... }` に対応する。
+ */
 export interface LocationBlock {
+  /** URI マッチング条件（完全一致、プレフィックス、正規表現など） */
   match: LocationMatch;
+  /** このlocationブロック内で適用されるディレクティブ群 */
   directives: LocationDirectives;
 }
 
-/** server ブロック */
+/**
+ * server ブロック — Nginx のバーチャルホスト設定に対応する。
+ * 1つの server ブロックが1つの仮想サーバーを定義し、
+ * listen ポートと server_name（ホスト名）の組み合わせでリクエストを振り分ける。
+ */
 export interface ServerBlock {
+  /** listen ディレクティブ — このサーバーが待ち受けるポート番号 */
   listen: number;
+  /** server_name ディレクティブ — マッチ対象のホスト名リスト（"_" はワイルドカード） */
   serverName: string[];
+  /** このサーバーブロック内の location ブロック一覧 */
   locations: LocationBlock[];
-  /** デフォルトヘッダ */
+  /** すべてのレスポンスに付与するデフォルトHTTPヘッダ */
   defaultHeaders?: Record<string, string>;
 }
 
-/** nginx.conf 全体 */
+/**
+ * nginx.conf 全体の設定を表す構造体。
+ * 実際の Nginx では http コンテキスト内に upstream / server ブロックが配置される。
+ * staticFiles は仮想ファイルシステムとして、実際のディスクI/Oをエミュレートする。
+ */
 export interface NginxConfig {
+  /** upstream ブロック一覧 — ロードバランシング用のバックエンドグループ定義 */
   upstreams: Upstream[];
+  /** server ブロック一覧 — バーチャルホスト定義 */
   servers: ServerBlock[];
-  /** 仮想ファイルシステム */
+  /** 仮想ファイルシステム — パスをキーとしたファイル内容のマップ（ディスクI/Oのエミュレート） */
   staticFiles: Record<string, string>;
 }
 
-// ── HTTP ──
+// ── HTTP リクエスト/レスポンス型定義 ──
 
+/** HTTP リクエスト — クライアントから Nginx に送信されるリクエストを表す */
 export interface HttpRequest {
+  /** HTTPメソッド（GET, POST, PUT, DELETE など） */
   method: string;
+  /** Host ヘッダの値 — server_name マッチングに使用される */
   host: string;
+  /** リクエストURI パス — location マッチングの対象 */
   path: string;
+  /** HTTPリクエストヘッダ（user-agent, cookie 等） */
   headers: Record<string, string>;
+  /** リクエストボディ（POST/PUTリクエスト時） */
   body?: string;
 }
 
+/** HTTP レスポンス — Nginx からクライアントに返却されるレスポンスを表す */
 export interface HttpResponse {
+  /** HTTPステータスコード（200, 301, 404, 502 など） */
   status: number;
+  /** ステータスコードに対応するテキスト（"OK", "Not Found" など） */
   statusText: string;
+  /** HTTPレスポンスヘッダ（content-type, cache-control, server 等） */
   headers: Record<string, string>;
+  /** レスポンスボディ（HTML, JSON 等） */
   body: string;
 }
 
-/** 処理トレースの 1 ステップ */
+/**
+ * 処理トレースの 1 ステップ — Nginx のリクエスト処理パイプラインの各フェーズを記録する。
+ *
+ * フェーズ一覧:
+ *   - accept:         接続受付（クライアントからのリクエスト到着）
+ *   - server_match:   server ブロックの選択（Host ヘッダによるバーチャルホスト判定）
+ *   - location_match: location ブロックの選択（URIパターンマッチング）
+ *   - rewrite:        URI書き換え処理
+ *   - proxy:          proxy_pass によるリバースプロキシ転送
+ *   - upstream:       upstream サーバー選択（ロードバランシング）
+ *   - static:         静的ファイル配信処理
+ *   - return:         return ディレクティブによる即時レスポンス
+ *   - response:       最終レスポンス生成
+ *   - header:         レスポンスヘッダの付与
+ *   - error:          エラー発生
+ */
 export interface NginxTrace {
   phase: "accept" | "server_match" | "location_match" | "rewrite" | "proxy" | "upstream" | "static" | "return" | "response" | "header" | "error";
   detail: string;
 }
 
-/** リクエスト処理結果 */
+/**
+ * リクエスト処理結果 — 1つのHTTPリクエストに対する Nginx の処理結果をまとめた構造体。
+ * レスポンス本体に加え、マッチしたサーバー/locationの情報やトレースログを含む。
+ */
 export interface NginxResult {
+  /** 元のHTTPリクエスト */
   request: HttpRequest;
+  /** Nginx が生成したHTTPレスポンス */
   response: HttpResponse;
+  /** 処理パイプラインのトレースログ — 各フェーズの詳細を時系列で記録 */
   trace: NginxTrace[];
+  /** マッチした server ブロックの server_name（null の場合はマッチなし） */
   matchedServer: string | null;
+  /** マッチした location ブロックのラベル表現（null の場合はマッチなし） */
   matchedLocation: string | null;
+  /** 選択された upstream サーバーのアドレス（null の場合は upstream 未使用） */
   upstreamServer: string | null;
 }
 
-// ── エンジン ──
+// ── Nginx シミュレーションエンジン本体 ──
 
+/**
+ * NginxEngine — Nginx のリクエスト処理パイプラインをエミュレートするクラス。
+ *
+ * 実際の Nginx はマスタープロセスが設定を読み込み、ワーカープロセスが
+ * epoll/kqueue ベースのイベントループでリクエストを非同期処理する。
+ * このシミュレーターでは同期的に処理を行い、各フェーズのトレースを記録する。
+ */
 export class NginxEngine {
+  /** Nginx の設定（nginx.conf に相当） */
   private config: NginxConfig;
 
   constructor(config: NginxConfig) {
     this.config = config;
-    // RR インデックス初期化
+    // 各 upstream グループのラウンドロビンカウンタを初期化する
     for (const up of config.upstreams) {
       up._rrIndex = 0;
     }
   }
 
+  /** 現在の設定オブジェクトを取得する */
   get currentConfig(): NginxConfig {
     return this.config;
   }
 
-  /** HTTP リクエストを処理する */
+  /**
+   * HTTP リクエストを処理するメインエントリポイント。
+   * Nginx のリクエスト処理フローに従い、以下の順序で処理を行う:
+   *   1. 接続受付 (accept フェーズ)
+   *   2. server ブロック選択 — Host ヘッダでバーチャルホストをマッチ
+   *   3. location ブロック選択 — URI パスで最適な location を決定
+   *   4. ディレクティブ実行 — return / proxy_pass / 静的ファイル配信
+   *   5. レスポンス返却
+   */
   handleRequest(req: HttpRequest): NginxResult {
     const trace: NginxTrace[] = [];
 
@@ -145,8 +257,12 @@ export class NginxEngine {
     return this.processServer(req, server, trace);
   }
 
+  /**
+   * 選択された server ブロック内でリクエストを処理する。
+   * location マッチング → ディレクティブ実行 → レスポンス生成の順に処理する。
+   */
   private processServer(req: HttpRequest, server: ServerBlock, trace: NginxTrace[]): NginxResult {
-    // 2. location マッチング (Nginx の優先順位に従う)
+    // 2. location マッチング — Nginx の優先順位（= > ^~ > ~ > prefix）に従って最適な location を選択
     const loc = this.matchLocation(req.path, server.locations);
     if (loc === undefined) {
       trace.push({ phase: "location_match", detail: `"${req.path}" に一致する location なし → 404` });
@@ -157,18 +273,24 @@ export class NginxEngine {
     trace.push({ phase: "location_match", detail: `location ${locLabel} にマッチ` });
 
     const dirs = loc.directives;
+
+    // レスポンスヘッダを構築する
+    // Nginx は常に "Server" ヘッダを付与し、server ブロックのデフォルトヘッダ、
+    // location ブロックの add_header ディレクティブの順でマージする
     const responseHeaders: Record<string, string> = {
       "server": "nginx/1.27.0",
       ...(server.defaultHeaders ?? {}),
       ...(dirs.addHeaders ?? {}),
     };
 
+    // expires ディレクティブ — ブラウザキャッシュ制御用の Cache-Control ヘッダを設定
     if (dirs.expires !== undefined) {
       responseHeaders["cache-control"] = `max-age=${dirs.expires}`;
       trace.push({ phase: "header", detail: `Cache-Control: max-age=${dirs.expires}` });
     }
 
-    // 3. return ディレクティブ (リダイレクト等)
+    // 3. return ディレクティブ — 即座にレスポンスを返す（リダイレクト、ヘルスチェック応答等）
+    // 3xx 系の場合は Location ヘッダにリダイレクト先URLを設定する
     if (dirs.returnCode !== undefined) {
       const body = dirs.returnBody ?? "";
       if (dirs.returnCode >= 300 && dirs.returnCode < 400) {
@@ -180,7 +302,8 @@ export class NginxEngine {
       return this.makeResult(req, dirs.returnCode, responseHeaders, body, trace, server.serverName.join(","), locLabel, null);
     }
 
-    // 4. proxy_pass (リバースプロキシ)
+    // 4. proxy_pass ディレクティブ — リクエストをバックエンドサーバーに転送（リバースプロキシ）
+    // upstream グループ名が指定されていればロードバランサーを経由する
     if (dirs.proxyPass !== undefined) {
       return this.handleProxy(req, dirs.proxyPass, responseHeaders, trace, server.serverName.join(","), locLabel);
     }

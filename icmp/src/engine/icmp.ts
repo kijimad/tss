@@ -11,6 +11,7 @@
 
 // ── ICMP メッセージタイプ (RFC 792) ──
 
+/** RFC 792 で定義された ICMP メッセージタイプの定数マッピング */
 export const ICMP_TYPES = {
   ECHO_REPLY:          0,
   DEST_UNREACHABLE:    3,
@@ -27,6 +28,7 @@ export const ICMP_TYPES = {
   ADDR_MASK_REPLY:     18,
 } as const;
 
+/** ICMP タイプコードのユニオン型 */
 export type IcmpTypeCode = typeof ICMP_TYPES[keyof typeof ICMP_TYPES];
 
 /** Destination Unreachable コード (Type 3) */
@@ -61,7 +63,11 @@ export const REDIRECT_CODES = {
   TOS_HOST_REDIRECT:  3,
 } as const;
 
-/** タイプ番号→名前のマッピング */
+/**
+ * ICMP タイプ番号を人間が読める名前に変換する
+ * @param type - ICMP メッセージタイプ番号
+ * @returns タイプ名の文字列。未知のタイプは "Unknown(N)" 形式で返す
+ */
 export function icmpTypeName(type: number): string {
   const names: Record<number, string> = {
     0: "Echo Reply", 3: "Destination Unreachable", 4: "Source Quench",
@@ -73,7 +79,11 @@ export function icmpTypeName(type: number): string {
   return names[type] ?? `Unknown(${type})`;
 }
 
-/** Type 3 コード→名前 */
+/**
+ * Destination Unreachable (Type 3) のコード番号を名前に変換する
+ * @param code - Unreachable コード番号
+ * @returns コード名の文字列
+ */
 export function unreachCodeName(code: number): string {
   const names: Record<number, string> = {
     0: "Network Unreachable", 1: "Host Unreachable", 2: "Protocol Unreachable",
@@ -89,6 +99,7 @@ export function unreachCodeName(code: number): string {
 
 // ── パケット構造 ──
 
+/** IPv4 アドレスを表す文字列型 (例: "192.168.1.1") */
 export type IPv4 = string;
 
 /** IP ヘッダ (簡易) */
@@ -235,30 +246,60 @@ export interface SimResult {
 
 // ── ユーティリティ ──
 
-/** IP アドレスを整数に変換する */
+/**
+ * IPv4 アドレス文字列を 32 ビット符号なし整数に変換する
+ * @param ip - ドット区切りの IPv4 アドレス文字列
+ * @returns 符号なし 32 ビット整数
+ */
 export function ipToInt(ip: IPv4): number {
   const p = ip.split(".");
   return ((parseInt(p[0]!) << 24) | (parseInt(p[1]!) << 16) | (parseInt(p[2]!) << 8) | parseInt(p[3]!)) >>> 0;
 }
 
-/** 整数を IP アドレスに変換する */
+/**
+ * 32 ビット符号なし整数を IPv4 アドレス文字列に変換する
+ * @param n - 符号なし 32 ビット整数
+ * @returns ドット区切りの IPv4 アドレス文字列
+ */
 export function intToIp(n: number): IPv4 {
   return `${(n >>> 24) & 0xff}.${(n >>> 16) & 0xff}.${(n >>> 8) & 0xff}.${n & 0xff}`;
 }
 
-/** サブネットマッチング */
+/**
+ * IP アドレスが指定サブネットに属するか判定する
+ * @param ip - 判定対象の IP アドレス
+ * @param dest - サブネットの宛先アドレス
+ * @param mask - サブネットマスク
+ * @returns マッチすれば true
+ */
 export function matchSubnet(ip: IPv4, dest: IPv4, mask: IPv4): boolean {
   return (ipToInt(ip) & ipToInt(mask)) === (ipToInt(dest) & ipToInt(mask));
 }
 
-/** ICMP チェックサム計算 (簡易) */
+/**
+ * ICMP チェックサムを簡易計算する
+ * @param type - ICMP タイプ
+ * @param code - ICMP コード
+ * @param rest - ヘッダの残り 4 バイト (ID+Seq 等)
+ * @param payloadLen - ペイロード長
+ * @returns 16 ビットのチェックサム値
+ */
 export function computeChecksum(type: number, code: number, rest: number, payloadLen: number): number {
   let sum = (type << 8 | code) + rest + payloadLen;
   while (sum > 0xffff) sum = (sum & 0xffff) + (sum >> 16);
   return (~sum) & 0xffff;
 }
 
-/** IP ヘッダを作成する */
+/**
+ * 簡易 IP ヘッダを生成する
+ * @param src - 送信元 IP アドレス
+ * @param dst - 宛先 IP アドレス
+ * @param ttl - Time To Live
+ * @param payloadLen - ペイロード長 (ICMP ヘッダ含む)
+ * @param df - Don't Fragment フラグ
+ * @param proto - プロトコル番号 (デフォルト: 1 = ICMP)
+ * @returns 生成した IP ヘッダ
+ */
 export function makeIpHeader(src: IPv4, dst: IPv4, ttl: number, payloadLen: number, df: boolean, proto?: number): IpHeader {
   return {
     version: 4, ihl: 5, tos: 0, totalLength: 20 + 8 + payloadLen,
@@ -268,7 +309,19 @@ export function makeIpHeader(src: IPv4, dst: IPv4, ttl: number, payloadLen: numb
   };
 }
 
-/** ICMP メッセージを作成する */
+/**
+ * ICMP メッセージ (IP ヘッダ + ICMP ヘッダ + ペイロード) を生成する
+ * @param src - 送信元 IP
+ * @param dst - 宛先 IP
+ * @param type - ICMP タイプ
+ * @param code - ICMP コード
+ * @param rest - ヘッダ残り部分 (ID+Seq / Gateway / MTU 等)
+ * @param ttl - TTL 値
+ * @param payloadSize - ペイロードサイズ (最大 64 バイト)
+ * @param df - DF フラグ
+ * @param extra - 追加メタデータ
+ * @returns 生成した ICMP メッセージ
+ */
 export function makeIcmpMessage(
   src: IPv4, dst: IPv4, type: number, code: number, rest: number,
   ttl: number, payloadSize: number, df: boolean, extra?: Record<string, string | number>,
@@ -286,7 +339,13 @@ export function makeIcmpMessage(
 
 // ── 経路探索 ──
 
-/** BFS でノード名の経路を返す */
+/**
+ * BFS (幅優先探索) でトポロジー上の最短経路を探索する
+ * @param topo - ネットワークトポロジー
+ * @param srcName - 送信元ノード名
+ * @param dstIp - 宛先 IP アドレス
+ * @returns ノード名の配列 (経路)。到達不能なら undefined
+ */
 export function findPath(topo: Topology, srcName: string, dstIp: IPv4): string[] | undefined {
   const dstNode = topo.nodes.find((n) => n.ip === dstIp || n.aliases?.includes(dstIp));
   if (!dstNode) return undefined;
@@ -306,18 +365,37 @@ export function findPath(topo: Topology, srcName: string, dstIp: IPv4): string[]
   return undefined;
 }
 
-/** リンクを取得する */
+/**
+ * 2 つのノード間のリンクを取得する (方向を問わない)
+ * @param topo - ネットワークトポロジー
+ * @param a - ノード名 A
+ * @param b - ノード名 B
+ * @returns リンク情報。存在しなければ undefined
+ */
 export function getLink(topo: Topology, a: string, b: string): NetLink | undefined {
   return topo.links.find((l) => (l.from === a && l.to === b) || (l.from === b && l.to === a));
 }
 
 // ── ICMP シミュレーター ──
 
+/**
+ * ICMP プロトコルのシミュレーションを行うメインクラス。
+ * 仮想トポロジー上で ICMP メッセージの送信・転送・応答を再現し、
+ * 各ホップでの TTL デクリメント、MTU チェック、ファイアウォール、
+ * パケットロスなどのネットワーク動作をエミュレートする。
+ */
 export class IcmpSimulator {
+  /** シミュレーション対象のネットワークトポロジー */
   private topo: Topology;
 
+  /** @param topo - シミュレーション対象のネットワークトポロジー */
   constructor(topo: Topology) { this.topo = topo; }
 
+  /**
+   * 複数のシナリオを順次実行し、シミュレーション結果を返す
+   * @param scenarios - 実行するシナリオの配列
+   * @returns イベントログ、メッセージ一覧、統計情報を含む結果
+   */
   simulate(scenarios: Scenario[]): SimResult {
     const events: SimEvent[] = [];
     const messages: IcmpMessage[] = [];
@@ -339,6 +417,15 @@ export class IcmpSimulator {
     return { events, messages, stats: { sent, received, errors, dropped, redirects }, totalTime: time };
   }
 
+  /**
+   * 単一シナリオを処理し、パケットの送信から宛先での応答までをシミュレートする。
+   * 経路探索、各ホップでの TTL/MTU/FW チェック、宛先でのメッセージタイプ別応答を行う。
+   * @param sc - 実行するシナリオ
+   * @param startTime - シミュレーション開始時刻 (ms)
+   * @param events - イベントログの蓄積先
+   * @param messages - メッセージ一覧の蓄積先
+   * @returns シナリオの結果 ("received" | "error" | "dropped" | "redirect")
+   */
   private processScenario(
     sc: Scenario, startTime: number, events: SimEvent[], messages: IcmpMessage[],
   ): "received" | "error" | "dropped" | "redirect" {
@@ -515,6 +602,12 @@ export class IcmpSimulator {
     }
   }
 
+  /**
+   * ノードのファイアウォールルールに基づき ICMP メッセージの処理を判定する
+   * @param node - チェック対象のノード
+   * @param icmpType - 受信した ICMP タイプ
+   * @returns "allow" (通過) | "drop" (静かに破棄) | "reject" (エラー応答付き拒否)
+   */
   private checkFirewall(node: NetNode, icmpType: number): "allow" | "drop" | "reject" {
     for (const rule of node.firewall) {
       if (rule.icmpType === 255 || rule.icmpType === icmpType) return rule.action;
@@ -525,6 +618,13 @@ export class IcmpSimulator {
 
 // ── ネットワーク構築ヘルパー ──
 
+/**
+ * 一般ノード (ホスト) を簡潔に生成するヘルパー関数
+ * @param name - ノード名
+ * @param ip - IP アドレス
+ * @param opts - オプション設定 (MTU, TTL, ファイアウォール等)
+ * @returns 生成したネットワークノード
+ */
 export function node(name: string, ip: IPv4, opts?: Partial<NetNode>): NetNode {
   return {
     name, ip, mac: `02:00:${ip.split(".").map((o) => parseInt(o).toString(16).padStart(2, "0")).join(":")}`,
@@ -535,10 +635,26 @@ export function node(name: string, ip: IPv4, opts?: Partial<NetNode>): NetNode {
   };
 }
 
+/**
+ * ルーターノードを簡潔に生成するヘルパー関数。
+ * isRouter=true, 初期 TTL=255 がデフォルトで設定される。
+ * @param name - ノード名
+ * @param ip - IP アドレス
+ * @param opts - オプション設定
+ * @returns 生成したルーターノード
+ */
 export function routerNode(name: string, ip: IPv4, opts?: Partial<NetNode>): NetNode {
   return node(name, ip, { ...opts, isRouter: true, initialTtl: opts?.initialTtl ?? 255 });
 }
 
+/**
+ * ネットワークリンクを簡潔に生成するヘルパー関数
+ * @param from - 接続元ノード名
+ * @param to - 接続先ノード名
+ * @param latency - レイテンシ (ms)
+ * @param opts - オプション (パケットロス率, リンク MTU)
+ * @returns 生成したリンク
+ */
 export function netLink(from: string, to: string, latency: number, opts?: { loss?: number; mtu?: number }): NetLink {
   return { from, to, latency, lossRate: opts?.loss ?? 0, mtu: opts?.mtu };
 }

@@ -598,3 +598,44 @@ services:
     <<: *app
     volumes: [./netprint:/app]
     ports: ["5621:5173"]
+  unix-v6:
+    <<: *app
+    volumes: [./unix-v6:/app]
+    ports: ["5622:5173"]
+  ebiten:
+    <<: *app
+    volumes: [./ebiten:/app]
+    ports: ["5623:5173"]
+  mem-swap:
+    <<: *app
+    volumes: [./mem-swap:/app]
+    ports: ["5624:5173"]
+
+  modem-onu:
+    <<: *app
+    volumes: [./modem-onu:/app]
+    ports: ["5625:5173"]
+  win-api:
+    <<: *app
+    volumes: [./win-api:/app]
+    ports: ["5626:5173"]
+  webgl:
+    <<: *app
+    volumes: [./webgl:/app]
+    ports: ["5627:5173"]
+  wasm:
+    <<: *app
+    volumes: [./wasm:/app]
+    ports: ["5628:5173"]
+  graphql:
+    <<: *app
+    volumes: [./graphql:/app]
+    ports: ["5629:5173"]
+  famicom:
+    <<: *app
+    volumes: [./famicom:/app]
+    ports: ["5630:5173"]
+  cdk:
+    <<: *app
+    volumes: [./cdk:/app]
+    ports: ["5631:5173"]

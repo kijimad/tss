@@ -1,19 +1,54 @@
 /**
- * wifi.ts — IEEE 802.11 Wi-Fi シミュレーション
+ * wifi.ts — IEEE 802.11 Wi-Fi シミュレーションエンジン
  *
- * 無線 LAN の物理層〜MAC 層をエミュレートする:
- *   ビーコン → プローブ → 認証 → アソシエーション →
- *   CSMA/CA (DCF) → データ転送 → ACK
+ * IEEE 802.11 は無線 LAN (WLAN) の国際標準規格であり、
+ * 2.4GHz / 5GHz / 6GHz の周波数帯で無線通信を行う。
+ *
+ * このモジュールでは、以下の Wi-Fi プロトコルスタックをエミュレートする:
+ *
+ * 【接続シーケンス】
+ *   1. ビーコン受信 — AP が定期的にブロードキャストする管理フレーム
+ *   2. プローブ交換 — STA が AP の能力情報を要求・取得
+ *   3. 認証 (Authentication) — Open System 認証 または SAE (WPA3)
+ *   4. アソシエーション — STA が AP の BSS (Basic Service Set) に参加
+ *   5. 4-way Handshake (WPA2/WPA3) — EAPOL によるペアワイズ鍵 (PTK) の確立
+ *
+ * 【データ転送 (DCF: Distributed Coordination Function)】
+ *   6. CSMA/CA — キャリアセンス多重アクセス/衝突回避方式
+ *      (イーサネットの CSMA/CD と異なり、衝突を「回避」する方式)
+ *   7. バックオフ — コンテンションウィンドウ (CW) に基づくランダム待機
+ *   8. RTS/CTS (任意) — 隠れ端末問題の対策
+ *   9. データフレーム送信 — ペイロードの送信 (暗号化あり/なし)
+ *  10. ACK — SIFS 間隔後の受信確認
+ *
+ * 【電波伝搬モデル】
+ *   - FSPL (自由空間パスロス) に基づく RSSI 計算
+ *   - 距離と周波数から信号強度を推定
  */
 
-// ── 802.11 規格 ──
+// ── 802.11 規格定義 ──
+// Wi-Fi は世代ごとに異なる変調方式・帯域幅・最大データレートを持つ。
+// 802.11b (1999) から 802.11ax (Wi-Fi 6, 2020) まで、
+// 各世代で通信速度と効率が大幅に改善されている。
 
+/**
+ * Wi-Fi 規格の定義インタフェース
+ *
+ * IEEE 802.11 の各世代 (a/b/g/n/ac/ax) に対応する
+ * 物理層パラメータを保持する。
+ */
 export interface WifiStandard {
+  /** 規格名 (例: "802.11ax") */
   name: string;
+  /** Wi-Fi Alliance のマーケティング名 (例: "Wi-Fi 6") */
   generation: string;
+  /** 使用周波数帯 (例: "2.4/5/6 GHz") */
   band: string;
+  /** 理論上の最大データレート (例: "9.6 Gbps") */
   maxRate: string;
+  /** チャネル帯域幅 (MHz)。広いほど高スループット */
   channelWidth: number;
+  /** 変調方式 (例: "OFDMA+MU-MIMO") */
   modulation: string;
 }
 

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ebiten Simulator</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #2a2a3a;
+    --text: #c8c8d4;
+    --text-dim: #6a6a7a;
+    --accent: #4a9eff;
+    --accent2: #7c5cff;
+    --green: #4ade80;
+    --orange: #fb923c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "SF Mono", "Cascadia Code", "JetBrains Mono", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ヘッダー */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  header .subtitle {
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  /* コントロールバー */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .controls select {
+    background: #1a1a2a;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    min-width: 200px;
+  }
+  .controls select:focus { outline: 1px solid var(--accent); }
+
+  .controls button {
+    background: #1a1a2a;
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  .controls button:hover { background: #252535; border-color: var(--accent); }
+  .controls button:active { background: var(--accent); color: #000; }
+
+  .controls .sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+  .controls label {
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .controls input[type="range"] {
+    width: 60px;
+    accent-color: var(--accent);
+  }
+
+  #preset-desc {
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 4px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    min-height: 20px;
+  }
+
+  /* メインレイアウト */
+  .main {
+    display: flex;
+    gap: 0;
+    height: calc(100vh - 100px);
+  }
+
+  /* キャンバスエリア */
+  .canvas-area {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px;
+    background: #080810;
+    border-right: 1px solid var(--border);
+  }
+  #game-canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid var(--border);
+    background: #000;
+  }
+
+  /* サイドパネル */
+  .side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 300px;
+  }
+
+  .panel {
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .panel.flex-grow { flex: 1; }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #14141e;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .panel-body {
+    overflow: auto;
+    padding: 4px;
+    font-size: 11px;
+    flex: 1;
+  }
+
+  /* テーブル */
+  .panel table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .panel td {
+    padding: 2px 6px;
+    border-bottom: 1px solid #1a1a25;
+  }
+  .panel td:first-child {
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .panel td:last-child {
+    color: var(--text);
+    text-align: right;
+  }
+
+  /* エンティティテーブル */
+  #entities td:nth-child(2),
+  #entities td:nth-child(3) {
+    color: var(--green);
+    text-align: right;
+    width: 40px;
+  }
+  #entities td:nth-child(4) {
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  /* イベントログ */
+  #events {
+    font-size: 10px;
+    line-height: 1.6;
+  }
+  #events div {
+    padding: 1px 4px;
+    border-bottom: 1px solid #13131d;
+  }
+  #events b {
+    font-weight: 500;
+    font-size: 9px;
+    text-transform: uppercase;
+  }
+
+  /* キーボードヒント */
+  .keyhint {
+    color: var(--text-dim);
+    font-size: 10px;
+    padding: 4px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .keyhint kbd {
+    background: #1a1a2a;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: inherit;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Ebiten Simulator</h1>
+    <span class="subtitle">Go 2D Game Engine — TypeScript Emulation</span>
+  </header>
+
+  <div class="controls">
+    <select id="preset-select"></select>
+    <div class="sep"></div>
+    <button id="btn-play">▶ Play</button>
+    <button id="btn-pause">⏸ Pause</button>
+    <button id="btn-step">▶| Step</button>
+    <button id="btn-reset">↻ Reset</button>
+    <div class="sep"></div>
+    <label>Scale</label>
+    <input type="range" id="scale-slider" min="1" max="4" value="2" step="1">
+    <span id="scale-label">2x</span>
+  </div>
+  <div id="preset-desc"></div>
+
+  <div class="main">
+    <div class="canvas-area">
+      <canvas id="game-canvas" width="640" height="480"></canvas>
+    </div>
+    <div class="side">
+      <div class="panel">
+        <div class="panel-header">Performance</div>
+        <div class="panel-body">
+          <table><tbody id="metrics"></tbody></table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Entities</div>
+        <div class="panel-body">
+          <table><tbody id="entities"></tbody></table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">Debug Info</div>
+        <div class="panel-body">
+          <table><tbody id="debug-info"></tbody></table>
+        </div>
+      </div>
+      <div class="panel flex-grow">
+        <div class="panel-header">Event Log</div>
+        <div class="panel-body" id="events"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="keyhint">
+    <kbd>N</kbd> Step &nbsp;
+    <kbd>Arrow Keys</kbd> / <kbd>WASD</kbd> Move &nbsp;
+    <kbd>Space</kbd> Action &nbsp;
+    <kbd>Click</kbd> Canvas上でマウス入力
+  </div>
+
+  <script type="module" src="./src/ui/app.ts"></script>
+</body>
+</html>

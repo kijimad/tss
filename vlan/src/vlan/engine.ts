@@ -1,9 +1,23 @@
+/**
+ * @module engine
+ * VLANシミュレーションのコアエンジンモジュール。
+ * スイッチ、ホスト、フレームの生成ヘルパーと、
+ * IEEE 802.1Qに基づくVLANフレーム転送シミュレーションロジックを提供する。
+ * BFSキューベースでフレームの伝搬をエミュレートし、
+ * MAC学習・フラッディング・ユニキャスト転送・VLANフィルタリングを再現する。
+ */
+
 import type {
   MacAddr, VlanId, Dot1QTag, EthernetFrame, SwitchPort,
   VlanEntry, VlanSwitch, Host, SimEvent, InjectFrame, SimulationResult,
 } from "./types.js";
 
-/** MACアドレス生成ヘルパー */
+/**
+ * MACアドレス生成ヘルパー。
+ * 数値IDから "00:00:00:00:00:xx" 形式のMACアドレスを生成する。
+ * @param id - MACアドレスの末尾に使用する数値（0〜255）
+ * @returns 生成されたMACアドレス文字列
+ */
 export function mac(id: number): MacAddr {
   const hex = id.toString(16).padStart(2, "0");
   return `00:00:00:00:00:${hex}`;
@@ -12,46 +26,99 @@ export function mac(id: number): MacAddr {
 /** ブロードキャストMACアドレス */
 export const BROADCAST_MAC: MacAddr = "ff:ff:ff:ff:ff:ff";
 
-/** 802.1Qタグ生成 */
+/**
+ * IEEE 802.1Qタグを生成する。
+ * @param vid - VLAN ID
+ * @param pcp - 優先度コードポイント（デフォルト: 0）
+ * @param dei - 破棄適格インジケータ（デフォルト: 0）
+ * @returns 生成された802.1Qタグオブジェクト
+ */
 export function makeTag(vid: VlanId, pcp = 0, dei = 0): Dot1QTag {
   return { tpid: 0x8100, pcp, dei, vid };
 }
 
-/** フレーム生成 */
+/**
+ * イーサネットフレームを生成する。
+ * @param src - 送信元MACアドレス
+ * @param dst - 宛先MACアドレス
+ * @param payload - ペイロードデータ
+ * @param tag - オプションの802.1Qタグ
+ * @returns 生成されたイーサネットフレーム
+ */
 export function makeFrame(src: MacAddr, dst: MacAddr, payload: string, tag?: Dot1QTag): EthernetFrame {
   return { src, dst, payload, ...(tag ? { tag } : {}) };
 }
 
-/** アクセスポート生成 */
+/**
+ * アクセスモードのスイッチポートを生成する。
+ * アクセスポートは単一のVLANに所属し、タグなしフレームのみを扱う。
+ * @param id - ポート番号
+ * @param vlan - 割り当てるVLAN ID
+ * @returns 生成されたアクセスポート
+ */
 export function makeAccessPort(id: number, vlan: VlanId): SwitchPort {
   return { id, mode: "access", accessVlan: vlan, allowedVlans: [], nativeVlan: 1 };
 }
 
-/** トランクポート生成 */
+/**
+ * トランクモードのスイッチポートを生成する。
+ * トランクポートは複数のVLANのフレームを802.1Qタグ付きで伝送する。
+ * @param id - ポート番号
+ * @param allowedVlans - 通過を許可するVLAN IDのリスト
+ * @param nativeVlan - ネイティブVLAN ID（タグなしフレームに適用、デフォルト: 1）
+ * @returns 生成されたトランクポート
+ */
 export function makeTrunkPort(id: number, allowedVlans: VlanId[], nativeVlan: VlanId = 1): SwitchPort {
   return { id, mode: "trunk", accessVlan: 1, allowedVlans, nativeVlan };
 }
 
-/** スイッチ生成 */
+/**
+ * VLANスイッチを生成する。
+ * ポートとVLAN設定を持つL2スイッチインスタンスを作成する。
+ * @param id - スイッチの一意識別子
+ * @param name - スイッチの表示名
+ * @param ports - スイッチポートの配列
+ * @param vlans - VLAN定義の配列
+ * @returns 生成されたVLANスイッチ
+ */
 export function createSwitch(
   id: string, name: string, ports: SwitchPort[], vlans: VlanEntry[],
 ): VlanSwitch {
   return { id, name, ports: ports.map((p) => ({ ...p })), macTable: [], vlans: [...vlans] };
 }
 
-/** ホスト生成 */
+/**
+ * ホスト（エンドデバイス）を生成する。
+ * @param id - ホストの一意識別子
+ * @param name - ホストの表示名
+ * @param macAddr - ホストのMACアドレス
+ * @returns 生成されたホスト
+ */
 export function createHost(id: string, name: string, macAddr: MacAddr): Host {
   return { id, name, mac: macAddr };
 }
 
-/** ホストとスイッチポートを接続 */
+/**
+ * ホストをスイッチの指定ポートに接続する。
+ * 双方向のリンク情報を設定する。
+ * @param host - 接続するホスト
+ * @param sw - 接続先スイッチ
+ * @param portId - 接続先ポート番号
+ */
 export function connectHostToSwitch(host: Host, sw: VlanSwitch, portId: number): void {
   host.portLink = { deviceId: sw.id, portId };
   const port = sw.ports.find((p) => p.id === portId);
   if (port) port.link = { deviceId: host.id, portId: 0 };
 }
 
-/** スイッチ間トランク接続 */
+/**
+ * 2台のスイッチ間をトランクリンクで接続する。
+ * 双方のポートに相互のリンク情報を設定する。
+ * @param sw1 - 接続元スイッチ
+ * @param portId1 - 接続元ポート番号
+ * @param sw2 - 接続先スイッチ
+ * @param portId2 - 接続先ポート番号
+ */
 export function connectSwitches(
   sw1: VlanSwitch, portId1: number, sw2: VlanSwitch, portId2: number,
 ): void {
@@ -61,7 +128,15 @@ export function connectSwitches(
   if (p2) p2.link = { deviceId: sw1.id, portId: portId1 };
 }
 
-/** フレームのVLAN IDを決定（受信時） */
+/**
+ * フレーム受信時のVLAN IDを決定する（イングレス処理）。
+ * アクセスポートではポートに割り当てられたVLANを返し、
+ * トランクポートではタグのVLAN IDまたはネイティブVLANを返す。
+ * 許可されていないVLANの場合はnullを返す。
+ * @param port - フレームを受信したポート
+ * @param frame - 受信したイーサネットフレーム
+ * @returns 決定されたVLAN ID、またはフィルタ対象の場合null
+ */
 function determineIngressVlan(port: SwitchPort, frame: EthernetFrame): VlanId | null {
   if (port.mode === "access") {
     // アクセスポートではタグを無視してポートのVLANを使用
@@ -79,7 +154,16 @@ function determineIngressVlan(port: SwitchPort, frame: EthernetFrame): VlanId | 
   return port.nativeVlan;
 }
 
-/** MACアドレス学習 */
+/**
+ * MACアドレスを学習してMACアドレステーブルに登録する。
+ * 既存エントリがあればポートを更新し、新規の場合はエントリを追加してイベントを記録する。
+ * @param sw - 学習を行うスイッチ
+ * @param srcMac - 学習するMACアドレス
+ * @param vlan - MACアドレスが属するVLAN ID
+ * @param portId - MACアドレスが検出されたポート番号
+ * @param events - イベントログ配列
+ * @param step - 現在のシミュレーションステップ
+ */
 function learnMac(
   sw: VlanSwitch, srcMac: MacAddr, vlan: VlanId, portId: number, events: SimEvent[], step: number,
 ): void {
@@ -95,7 +179,15 @@ function learnMac(
   }
 }
 
-/** 送出時のフレーム加工 */
+/**
+ * フレーム送出時の加工処理（イーグレス処理）。
+ * アクセスポートではタグを除去し、トランクポートではVLANに応じてタグ付け/除去を行う。
+ * VLANフィルタリングにより送出不可の場合はnullを返す。
+ * @param port - 送出先ポート
+ * @param frame - 加工対象のフレーム
+ * @param vlan - フレームが属するVLAN ID
+ * @returns 加工済みフレーム、または送出不可の場合null
+ */
 function egressFrame(port: SwitchPort, frame: EthernetFrame, vlan: VlanId): EthernetFrame | null {
   if (port.mode === "access") {
     if (port.accessVlan !== vlan) return null; // VLAN不一致
@@ -114,7 +206,10 @@ function egressFrame(port: SwitchPort, frame: EthernetFrame, vlan: VlanId): Ethe
   return { ...frame, tag: makeTag(vlan) };
 }
 
-/** キュー要素 */
+/**
+ * BFSキューの要素。
+ * 転送待ちフレームのスイッチ、受信ポート、フレーム内容、VLAN情報を保持する。
+ */
 interface QueueItem {
   switchId: string;
   portId: number;
@@ -122,7 +217,16 @@ interface QueueItem {
   vlan: VlanId;
 }
 
-/** シミュレーション実行 */
+/**
+ * VLANシミュレーションを実行する。
+ * 注入フレームをホストから送信し、スイッチ間のフレーム転送をBFSで処理する。
+ * MAC学習、VLANフィルタリング、フラッディング、ユニキャスト転送を再現し、
+ * 各処理ステップのイベントログを記録する。
+ * @param switches - シミュレーション対象のスイッチ配列
+ * @param hosts - シミュレーション対象のホスト配列
+ * @param injections - 注入するフレームの配列
+ * @returns シミュレーション結果（イベントログとスイッチの最終状態）
+ */
 export function runSimulation(
   switches: VlanSwitch[], hosts: Host[], injections: InjectFrame[],
 ): SimulationResult {
@@ -268,7 +372,20 @@ export function runSimulation(
   return { events, switches };
 }
 
-/** フレーム配送ヘルパー */
+/**
+ * フレームを接続先デバイスに配送するヘルパー関数。
+ * 接続先がホストの場合はMACアドレスを照合して受信/破棄を判定し、
+ * 接続先がスイッチの場合はイングレス処理を行いキューに追加する。
+ * @param _sw - 送出元スイッチ（現在未使用）
+ * @param port - フレームを送出するポート
+ * @param frame - 送出するフレーム
+ * @param _vlan - フレームのVLAN ID（現在未使用）
+ * @param events - イベントログ配列
+ * @param step - 現在のシミュレーションステップ
+ * @param queue - BFS処理キュー
+ * @param switchMap - スイッチIDからスイッチへのマップ
+ * @param hostMap - ホストIDからホストへのマップ
+ */
 function deliverFrame(
   _sw: VlanSwitch,
   port: SwitchPort,

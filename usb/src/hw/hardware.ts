@@ -1,9 +1,14 @@
 /**
- * USBハードウェアシミュレーション
- * ホストコントローラ、ハブ、デバイスの物理層を表現する
+ * USBハードウェアシミュレーションモジュール
+ *
+ * USB規格に基づくホストコントローラ、ハブ、デバイスの物理層をモデル化する。
+ * デバイスディスクリプタ、エンドポイント、コンフィグレーション等のデータ構造と、
+ * キーボード・マウス・フラッシュドライブ・オーディオデバイスのファクトリ関数を提供する。
+ * 実際のハードウェアの電気的特性やタイミングはコード上でエミュレートされる。
  */
 
 // ========== USB速度規格 ==========
+/** USB通信速度の規格を表す列挙型 */
 export enum UsbSpeed {
   Low = "1.5 Mbps",   // USB 1.0 Low Speed
   Full = "12 Mbps",   // USB 1.1 Full Speed
@@ -12,6 +17,7 @@ export enum UsbSpeed {
 }
 
 // ========== USBデバイスクラス ==========
+/** USBデバイスクラスコードの列挙型（デバイスの機能分類を示す） */
 export enum UsbClass {
   HID = 0x03,          // ヒューマンインターフェースデバイス
   MassStorage = 0x08,  // マスストレージ
@@ -23,6 +29,7 @@ export enum UsbClass {
 }
 
 // ========== 転送タイプ ==========
+/** USB転送タイプの列挙型（データ転送の方式を定義する） */
 export enum TransferType {
   Control = "control",
   Bulk = "bulk",
@@ -31,12 +38,14 @@ export enum TransferType {
 }
 
 // ========== エンドポイント方向 ==========
+/** エンドポイントのデータ転送方向（ホスト視点でのIN/OUT） */
 export enum EndpointDirection {
   In = "IN",
   Out = "OUT",
 }
 
 // ========== デバイスの接続状態 ==========
+/** USBポートの接続状態を表す列挙型 */
 export enum PortStatus {
   Empty = "empty",
   Powered = "powered",
@@ -46,6 +55,7 @@ export enum PortStatus {
 }
 
 // ========== USBエンドポイント ==========
+/** USBエンドポイントの定義（デバイスとの通信チャネルを表す） */
 export interface UsbEndpoint {
   address: number;           // エンドポイント番号 (1-15)
   direction: EndpointDirection;
@@ -55,6 +65,7 @@ export interface UsbEndpoint {
 }
 
 // ========== USBインターフェース ==========
+/** USBインターフェースの定義（デバイスの論理的な機能単位を表す） */
 export interface UsbInterface {
   interfaceNumber: number;
   classCode: UsbClass;
@@ -65,6 +76,7 @@ export interface UsbInterface {
 }
 
 // ========== USBコンフィグレーション ==========
+/** USBコンフィグレーションの定義（デバイスの動作モードと電力設定を表す） */
 export interface UsbConfiguration {
   configValue: number;
   maxPower: number;       // mA単位
@@ -74,6 +86,7 @@ export interface UsbConfiguration {
 }
 
 // ========== USBデバイスディスクリプタ ==========
+/** USBデバイスディスクリプタの定義（デバイスの識別情報と能力を記述する） */
 export interface UsbDeviceDescriptor {
   usbVersion: string;        // "2.0", "3.0" など
   deviceClass: UsbClass;
@@ -90,6 +103,7 @@ export interface UsbDeviceDescriptor {
 }
 
 // ========== USBデバイス (物理デバイス) ==========
+/** USBデバイスの状態モデル（物理デバイスの接続状態とデータを保持する） */
 export interface UsbDevice {
   descriptor: UsbDeviceDescriptor;
   speed: UsbSpeed;
@@ -102,6 +116,7 @@ export interface UsbDevice {
 }
 
 // ========== USBポート (ハブ上の1ポート) ==========
+/** USBポートの状態モデル（ハブ上の物理ポート1つに対応する） */
 export interface UsbPort {
   portNumber: number;
   status: PortStatus;
@@ -110,6 +125,7 @@ export interface UsbPort {
 }
 
 // ========== USBハブ ==========
+/** USBハブの状態モデル（複数ポートを持つ中継デバイスを表す） */
 export interface UsbHub {
   ports: UsbPort[];
   tier: number;   // 階層 (ルートハブ=1)
@@ -117,6 +133,7 @@ export interface UsbHub {
 }
 
 // ========== USBホストコントローラ (xHCI) ==========
+/** USBホストコントローラの状態モデル（xHCI互換、ルートハブとアドレス管理を担う） */
 export interface UsbHostController {
   name: string;
   vendorId: number;
@@ -129,6 +146,7 @@ export interface UsbHostController {
 }
 
 // ========== USBバス上のパケット ==========
+/** USBバス上で送受信されるパケットの構造（PID・アドレス・エンドポイント・データを含む） */
 export interface UsbPacket {
   pid: "SETUP" | "DATA0" | "DATA1" | "ACK" | "NAK" | "STALL" | "IN" | "OUT";
   address: number;
@@ -138,7 +156,13 @@ export interface UsbPacket {
 
 // ========== ファクトリ関数 ==========
 
-/** USBキーボードデバイスを生成 */
+/**
+ * USBキーボードデバイスを生成する
+ *
+ * Logitech K120互換のLow Speedキーボードを作成する。
+ * HIDクラス・ブートプロトコル対応で、Interruptエンドポイント1つを持つ。
+ * @returns 初期化済みのUSBキーボードデバイス
+ */
 export function createKeyboard(): UsbDevice {
   return {
     descriptor: {
@@ -181,7 +205,13 @@ export function createKeyboard(): UsbDevice {
   };
 }
 
-/** USBマウスデバイスを生成 */
+/**
+ * USBマウスデバイスを生成する
+ *
+ * Logitech M100互換のLow Speedマウスを作成する。
+ * HIDクラス・ブートプロトコル対応で、Interruptエンドポイント1つを持つ。
+ * @returns 初期化済みのUSBマウスデバイス
+ */
 export function createMouse(): UsbDevice {
   return {
     descriptor: {
@@ -224,7 +254,15 @@ export function createMouse(): UsbDevice {
   };
 }
 
-/** USBマスストレージ (フラッシュドライブ) を生成 */
+/**
+ * USBマスストレージ（フラッシュドライブ）を生成する
+ *
+ * SanDisk Cruzer Blade互換のHigh Speedフラッシュドライブを作成する。
+ * SCSI / Bulk-Only Transportプロトコルに対応し、BulkのIN/OUTエンドポイントを持つ。
+ * 内部にFAT12ブートセクタ風のシミュレーションデータを保持する。
+ * @param sizeMB - ストレージ容量（MB単位、デフォルト16MB）
+ * @returns 初期化済みのUSBフラッシュドライブデバイス
+ */
 export function createFlashDrive(sizeMB: number = 16): UsbDevice {
   // ストレージデータをシミュレート (FAT12ブートセクタ風)
   const data = new Uint8Array(512);
@@ -288,7 +326,14 @@ export function createFlashDrive(sizeMB: number = 16): UsbDevice {
   };
 }
 
-/** USBオーディオデバイスを生成 */
+/**
+ * USBオーディオデバイスを生成する
+ *
+ * Focusrite Scarlett Solo互換のHigh Speedオーディオインターフェースを作成する。
+ * AudioControl、再生用AudioStreaming（Isochronous OUT）、録音用AudioStreaming（Isochronous IN）
+ * の3つのインターフェースを持つ。
+ * @returns 初期化済みのUSBオーディオデバイス
+ */
 export function createAudioDevice(): UsbDevice {
   return {
     descriptor: {
@@ -355,7 +400,13 @@ export function createAudioDevice(): UsbDevice {
   };
 }
 
-/** ホストコントローラを生成 (4ポートルートハブ) */
+/**
+ * USBホストコントローラを生成する（4ポートルートハブ付き）
+ *
+ * Intel製xHCI互換のホストコントローラを作成する。
+ * 4つのポートを持つルートハブが初期化され、すべてPowered状態になる。
+ * @returns 初期化済みのUSBホストコントローラ
+ */
 export function createHostController(): UsbHostController {
   const ports: UsbPort[] = [];
   for (let i = 1; i <= 4; i++) {
@@ -380,7 +431,13 @@ export function createHostController(): UsbHostController {
   };
 }
 
-/** デフォルト構成: キーボード、マウス、フラッシュドライブを接続 */
+/**
+ * デフォルト構成のホストコントローラを生成する
+ *
+ * キーボード（ポート1）、マウス（ポート2）、フラッシュドライブ（ポート3）を
+ * 接続した状態のホストコントローラを返す。ポート4は空。
+ * @returns デバイス接続済みのUSBホストコントローラ
+ */
 export function createDefaultSetup(): UsbHostController {
   const hc = createHostController();
   connectDevice(hc, 1, createKeyboard());
@@ -389,7 +446,16 @@ export function createDefaultSetup(): UsbHostController {
   return hc;
 }
 
-/** ホットプラグ: デバイスをポートに接続する */
+/**
+ * ホットプラグ: デバイスをポートに接続する
+ *
+ * 指定ポートにデバイスを接続し、ポート状態をConnectedに変更する。
+ * 既にデバイスが接続されているポートには接続できない。
+ * @param hc - ホストコントローラ
+ * @param portNumber - 接続先のポート番号
+ * @param device - 接続するUSBデバイス
+ * @returns 接続成功時true、ポートが使用中またはポートが存在しない場合false
+ */
 export function connectDevice(hc: UsbHostController, portNumber: number, device: UsbDevice): boolean {
   const port = hc.rootHub.ports.find(p => p.portNumber === portNumber);
   if (!port || port.device !== null) return false;
@@ -399,7 +465,15 @@ export function connectDevice(hc: UsbHostController, portNumber: number, device:
   return true;
 }
 
-/** デバイスをポートから切断する */
+/**
+ * デバイスをポートから切断する
+ *
+ * 指定ポートのデバイスを切断し、アドレステーブルからも削除する。
+ * ポートはPowered状態にリセットされ、再接続可能になる。
+ * @param hc - ホストコントローラ
+ * @param portNumber - 切断するポート番号
+ * @returns 切断されたデバイス、またはデバイスが存在しない場合null
+ */
 export function disconnectDevice(hc: UsbHostController, portNumber: number): UsbDevice | null {
   const port = hc.rootHub.ports.find(p => p.portNumber === portNumber);
   if (!port || !port.device) return null;

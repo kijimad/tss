@@ -1,15 +1,39 @@
+/**
+ * @module presets
+ * LLVM シミュレーターの実験プリセット定義モジュール。
+ * ブラウザのセレクトボックスから選択可能な定義済み実験を提供する。
+ * 各プリセットは IR モジュール定義と最適化/実行操作の組み合わせで構成される。
+ */
+
 import type { Preset } from "./types.js";
 
-/** ヘルパー: i32 型 */
+/** i32 型定数 — プリセット定義で頻繁に使用 */
 const i32 = { kind: "i32" as const };
+/** i1 型定数 — 条件分岐で使用する1ビット整数型 */
 const i1 = { kind: "i1" as const };
 
-/** ヘルパー: レジスタオペランド */
+/**
+ * i32 型のレジスタオペランドを生成するヘルパー。
+ * @param name - レジスタ名 (% プレフィックスなし)
+ */
 function reg(name: string) { return { kind: "reg" as const, name, type: i32 }; }
+/**
+ * i1 型のレジスタオペランドを生成するヘルパー。
+ * @param name - レジスタ名 (% プレフィックスなし)
+ */
 function regI1(name: string) { return { kind: "reg" as const, name, type: i1 }; }
+/**
+ * i32 型の即値定数オペランドを生成するヘルパー。
+ * @param value - 即値
+ */
 function imm(value: number) { return { kind: "const" as const, value, type: i32 }; }
+/**
+ * ラベルオペランドを生成するヘルパー (分岐先指定用)。
+ * @param name - ラベル名
+ */
 function label(name: string) { return { kind: "label" as const, name }; }
 
+/** 全てのプリセット定義の配列。UI のセレクトボックスに表示される。 */
 export const presets: Preset[] = [
   {
     name: "基本: 定数畳み込みと死コード除去",

@@ -1,13 +1,35 @@
+/**
+ * @module engine
+ * TCP/HTTPシミュレーションエンジン。
+ * TCPの3ウェイハンドシェイク、データ送受信、4ウェイ切断、RST、
+ * およびHTTPリクエスト/レスポンスのシミュレーションを実行する。
+ * ネットワーク通信をコード上でエミュレートし、各ステップのイベントを生成する。
+ */
+
 import type {
   TcpSocket, TcpSegment, TcpFlags, TcpState, SocketAddr,
   SimOp, SimEvent, SimulationResult, EventType,
   HttpRequest, HttpResponse,
 } from "./types.js";
 
+/**
+ * TCPフラグオブジェクトを生成するヘルパー関数。
+ * @param syn - SYNフラグ（接続開始）
+ * @param ack - ACKフラグ（確認応答）
+ * @param fin - FINフラグ（接続終了）
+ * @param rst - RSTフラグ（接続リセット）
+ * @param psh - PSHフラグ（即座にデータを渡す）
+ * @returns TCPフラグオブジェクト
+ */
 function flags(syn = false, ack = false, fin = false, rst = false, psh = false): TcpFlags {
   return { syn, ack, fin, rst, psh };
 }
 
+/**
+ * TCPフラグを文字列表現に変換する。
+ * @param f - TCPフラグオブジェクト
+ * @returns "[SYN,ACK]" のような括弧付きフラグ文字列
+ */
 function flagStr(f: TcpFlags): string {
   const parts: string[] = [];
   if (f.syn) parts.push("SYN");
@@ -18,6 +40,13 @@ function flagStr(f: TcpFlags): string {
   return `[${parts.join(",")}]`;
 }
 
+/**
+ * 初期状態のTCPソケットを生成する。
+ * 状態はCLOSED、ウィンドウサイズは65535で初期化される。
+ * @param local - ローカルアドレス
+ * @param remote - リモートアドレス
+ * @returns 初期化されたTCPソケット
+ */
 function makeSocket(local: SocketAddr, remote: SocketAddr): TcpSocket {
   return {
     localAddr: { ...local }, remoteAddr: { ...remote },
@@ -27,11 +56,32 @@ function makeSocket(local: SocketAddr, remote: SocketAddr): TcpSocket {
   };
 }
 
+/**
+ * TCPセグメントを生成するヘルパー関数。
+ * @param src - 送信元ポート番号
+ * @param dst - 宛先ポート番号
+ * @param seq - シーケンス番号
+ * @param ack - ACK番号
+ * @param f - TCPフラグ
+ * @param window - ウィンドウサイズ
+ * @param payload - ペイロードデータ
+ * @param payloadSize - ペイロードのバイト数
+ * @returns TCPセグメント
+ */
 function makeSegment(src: number, dst: number, seq: number, ack: number,
   f: TcpFlags, window: number, payload = "", payloadSize = 0): TcpSegment {
   return { srcPort: src, dstPort: dst, seq, ack, flags: f, window, payload, payloadSize };
 }
 
+/**
+ * シミュレーションを実行し、TCP/HTTPの通信過程をステップごとに記録する。
+ * 操作リスト(ops)に従い、ソケット作成・接続・データ送受信・切断・HTTP通信を
+ * エミュレートし、すべてのイベント・セグメント・統計を結果として返す。
+ * @param clientAddr - クライアント側のソケットアドレス
+ * @param serverAddr - サーバー側のソケットアドレス
+ * @param ops - 実行するシミュレーション操作の配列
+ * @returns シミュレーション結果（イベント、セグメント、ソケット状態、統計など）
+ */
 export function runSimulation(
   clientAddr: SocketAddr,
   serverAddr: SocketAddr,
@@ -51,16 +101,19 @@ export function runSimulation(
     retransmissions: 0, handshakeSegments: 0, teardownSegments: 0,
   };
 
+  /** シミュレーションイベントを記録する */
   function emit(type: EventType, desc: string, dir?: SimEvent["direction"], segment?: TcpSegment): void {
     events.push({ step, type, description: desc, direction: dir, segment });
   }
 
+  /** ソケットの状態を遷移させ、状態変更イベントを発行する */
   function stateChange(side: "client" | "server", from: TcpState, to: TcpState): void {
     const sock = side === "client" ? client : server;
     sock.state = to;
     emit("state_change", `${side}: ${from} → ${to}`, "local");
   }
 
+  /** TCPセグメントを送信し、セグメントリストと統計に記録する */
   function sendSegment(from: "client" | "server", seg: TcpSegment): void {
     segments.push(seg);
     stats.totalSegments++;
@@ -93,6 +146,7 @@ export function runSimulation(
     return raw;
   }
 
+  // 操作リストを順番に処理し、各操作に対応するTCP/HTTPの振る舞いをエミュレートする
   for (const op of ops) {
     step++;
 

@@ -1,12 +1,29 @@
+/**
+ * app.ts — 公開鍵暗号 & デジタル署名シミュレーションの UI モジュール
+ *
+ * ブラウザ上で動作するインタラクティブなシミュレータを構築する。
+ * セレクトボックスからプリセットシナリオを選択し、
+ * RSA の鍵生成・暗号化・署名・改ざん検出の全工程を可視化する。
+ */
+
 import { SigningEngine } from "../engine/signing.js";
 import type { SigningTrace, RsaKeyPair } from "../engine/signing.js";
 
 // ── シナリオ定義 ──
 
+/**
+ * シミュレーションのプリセットシナリオを定義するインターフェース
+ * 各シナリオは異なる素数ペアと入力データを持ち、
+ * RSA の挙動の違いを体験できる。
+ */
 export interface Scenario {
+  /** シナリオの表示名 */
   name: string;
+  /** シナリオの説明文 */
   description: string;
+  /** RSA の素因数 p */
   p: number;
+  /** RSA の素因数 q */
   q: number;
   /** 暗号化デモ用の平文値 */
   encryptValues: number[];
@@ -18,6 +35,7 @@ export interface Scenario {
   tamperedMessage: string;
 }
 
+/** プリセットシナリオ一覧 — セレクトボックスから選択可能 */
 export const SCENARIOS: Scenario[] = [
   {
     name: "基本 (p=61, q=53)",
@@ -59,6 +77,12 @@ export const SCENARIOS: Scenario[] = [
 
 // ── フェーズごとの色 ──
 
+/**
+ * トレースのフェーズに対応するカラーコードを返す
+ * UIでフェーズごとに色分け表示するために使用
+ * @param phase - トレースのフェーズ名
+ * @returns CSS カラーコード (例: "#a78bfa")
+ */
 function phaseColor(phase: SigningTrace["phase"]): string {
   switch (phase) {
     case "keygen":  return "#a78bfa";
@@ -75,7 +99,19 @@ function phaseColor(phase: SigningTrace["phase"]): string {
 
 // ── アプリ ──
 
+/**
+ * 公開鍵暗号・デジタル署名シミュレーションのメインアプリケーションクラス
+ *
+ * 3 カラムレイアウトで構成される:
+ * - 左パネル: 生成された RSA 鍵ペアの詳細表示
+ * - 中央パネル: 各操作 (暗号化、署名、改ざん検出等) のカード一覧
+ * - 右パネル: 選択した操作のトレース (計算過程) 表示
+ */
 export class SigningApp {
+  /**
+   * アプリケーションを初期化し、指定されたコンテナに UI を構築する
+   * @param container - アプリケーションを描画する HTML 要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 
@@ -159,6 +195,7 @@ export class SigningApp {
 
     // ── 描画ヘルパー ──
 
+    /** 鍵ペアの詳細を左パネルに描画する */
     const renderKey = (kp: RsaKeyPair) => {
       keyDiv.innerHTML = "";
       const sections = [
@@ -175,6 +212,7 @@ export class SigningApp {
       }
     };
 
+    /** トレース情報を右パネルにフェーズ別色分けで描画する */
     const renderTrace = (traces: SigningTrace[]) => {
       trDiv.innerHTML = "";
       for (const step of traces) {
@@ -188,13 +226,19 @@ export class SigningApp {
       }
     };
 
+    /** 操作カードの表示データを表すインターフェース */
     interface OpCard {
+      /** カードのタイトル (操作名) */
       title: string;
+      /** カードのサブタイトル (操作結果の概要) */
       subtitle: string;
+      /** 操作の成否を示すステータス */
       status: "success" | "fail" | "info";
+      /** この操作に紐づくトレース情報 */
       traces: SigningTrace[];
     }
 
+    /** 操作カード一覧を中央パネルに描画する (クリックでトレース表示) */
     const renderOps = (cards: OpCard[]) => {
       opsDiv.innerHTML = "";
       for (const card of cards) {
@@ -211,6 +255,10 @@ export class SigningApp {
 
     // ── ロジック ──
 
+    /**
+     * 選択されたシナリオの全操作を実行し、結果を描画する
+     * 鍵生成 → 暗号化/復号 → 署名/検証 → 改ざん検出 → 別鍵検証の順で実行
+     */
     const runScenario = (sc: Scenario) => {
       descSpan.textContent = sc.description;
       const engine = new SigningEngine();
@@ -292,6 +340,7 @@ export class SigningApp {
       if (cards[0]) renderTrace(cards[0].traces);
     };
 
+    /** シナリオを読み込み、UIを初期状態にリセットする */
     const loadScenario = (sc: Scenario) => {
       descSpan.textContent = sc.description;
       opsDiv.innerHTML = "";
@@ -299,15 +348,18 @@ export class SigningApp {
       keyDiv.innerHTML = '<div style="color:#64748b;">▶ Run All をクリックして開始</div>';
     };
 
+    // セレクトボックス変更時にシナリオを切り替え
     scSelect.addEventListener("change", () => {
       const sc = SCENARIOS[Number(scSelect.value)];
       if (sc) loadScenario(sc);
     });
+    // 実行ボタンクリック時にシナリオを実行
     runBtn.addEventListener("click", () => {
       const sc = SCENARIOS[Number(scSelect.value)];
       if (sc) runScenario(sc);
     });
 
+    // 初期表示: 最初のシナリオを読み込む
     loadScenario(SCENARIOS[0]!);
   }
 }

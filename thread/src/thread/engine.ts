@@ -1,4 +1,10 @@
-/* UNIX スレッド シミュレーター エンジン */
+/**
+ * UNIX スレッド シミュレーター エンジンモジュール
+ *
+ * POSIXスレッドの動作をエミュレートするシミュレーションエンジンを提供する。
+ * スケジューリング、命令実行、同期プリミティブ処理、
+ * デッドロック検出、レースコンディション検出の機能を含む。
+ */
 
 import type {
   Thread, Tid, Mutex, CondVar, RwLock, Barrier,
@@ -25,7 +31,12 @@ interface SimState {
   sleepCounters: Map<Tid, number>;
 }
 
-/** 初期状態を作成 */
+/**
+ * シミュレーションの初期状態を作成する
+ * メインスレッド（TID=0）を生成し、共有変数を初期化する
+ * @param op - シミュレーション操作の定義
+ * @returns 初期化されたシミュレーション内部状態
+ */
 function createState(op: SimOp): SimState {
   const sharedVars = new Map<string, SharedVar>();
   for (const sv of op.sharedVars) {
@@ -50,7 +61,14 @@ function createState(op: SimOp): SimState {
 
 // ─── スケジューラ ───
 
-/** 次に実行するスレッドを選択 */
+/**
+ * 次に実行するスレッドを選択する（スケジューラ）
+ * 設定されたスケジューリングアルゴリズムに基づき、ready状態のスレッドから
+ * 次に実行するスレッドを決定する。
+ * @param state - 現在のシミュレーション状態
+ * @param config - スケジューラ設定
+ * @returns 選択されたスレッドのTID。実行可能なスレッドがない場合はnull
+ */
 export function schedule(state: SimState, config: SimConfig): Tid | null {
   const ready = state.threads.filter(t => t.state === "ready");
   if (ready.length === 0) return null;
@@ -77,7 +95,16 @@ export function schedule(state: SimState, config: SimConfig): Tid | null {
 
 // ─── 命令実行 ───
 
-/** 1命令を実行 */
+/**
+ * 1命令を実行する
+ * 指定されたスレッドの命令を実行し、状態を更新する。
+ * スレッド生成、同期プリミティブ操作、共有変数アクセス等を処理する。
+ * @param state - 現在のシミュレーション状態
+ * @param tid - 実行するスレッドのTID
+ * @param instr - 実行する命令
+ * @param _config - シミュレーション設定（現在未使用）
+ * @returns 実行結果を表すメッセージ文字列
+ */
 function executeInstr(state: SimState, tid: Tid, instr: ThreadInstr, _config: SimConfig): string {
   const thread = state.threads.find(t => t.tid === tid)!;
 
@@ -412,7 +439,13 @@ function executeInstr(state: SimState, tid: Tid, instr: ThreadInstr, _config: Si
 
 // ─── デッドロック検出 ───
 
-/** デッドロック判定（全アクティブスレッドがblocked、sleep中は除外） */
+/**
+ * デッドロック判定
+ * 全アクティブスレッドがblocked状態であるかを検査する。
+ * ただし、sleep中のスレッドは自然に起床するためデッドロックとは判定しない。
+ * @param state - 現在のシミュレーション状態
+ * @returns デッドロックが検出された場合true
+ */
 export function detectDeadlock(state: SimState): boolean {
   const active = state.threads.filter(t => t.state !== "terminated");
   if (active.length === 0) return false;
@@ -423,7 +456,14 @@ export function detectDeadlock(state: SimState): boolean {
 
 // ─── レースコンディション検出 ───
 
-/** レースコンディション検出 */
+/**
+ * レースコンディション検出
+ * 共有変数のアクセスログを解析し、データ競合の可能性を検出する。
+ * 同一ティックでの複数スレッドによる書き込み、およびMutex未保護の
+ * 複数スレッドによるアクセスを検出する。
+ * @param state - 現在のシミュレーション状態
+ * @returns 検出されたレースコンディションの配列（変数名と関連スレッドID）
+ */
 export function detectRaces(state: SimState): { varName: string; tids: Tid[] }[] {
   const races: { varName: string; tids: Tid[] }[] = [];
 
@@ -461,7 +501,13 @@ export function detectRaces(state: SimState): { varName: string; tids: Tid[] }[]
   return races;
 }
 
-/** 共有変数がMutexで保護されているか（簡易判定） */
+/**
+ * 共有変数がMutexで保護されているかを簡易判定する
+ * Mutexが存在し使用されていれば保護されているとみなす（簡易実装）。
+ * @param state - 現在のシミュレーション状態
+ * @param _varName - 判定対象の変数名（現在未使用）
+ * @returns Mutexで保護されていると判定された場合true
+ */
 function isProtectedByMutex(state: SimState, _varName: string): boolean {
   // 全スレッドのアクセス時にMutexを保持していたかを簡易チェック
   // 完全な実装は複雑なので、Mutexが存在して使用されていれば保護とみなす
@@ -473,7 +519,12 @@ function isProtectedByMutex(state: SimState, _varName: string): boolean {
 
 // ─── シミュレーション実行 ───
 
-/** シミュレーション実行 */
+/**
+ * 複数のシミュレーション操作を順次実行する
+ * 各SimOpを個別に実行し、結果を統合して返す。
+ * @param ops - 実行するシミュレーション操作の配列
+ * @returns 全操作の統合結果
+ */
 export function simulate(ops: SimOp[]): SimulationResult {
   const allTicks: TickResult[] = [];
   const allEvents: SimEvent[] = [];
@@ -491,7 +542,14 @@ export function simulate(ops: SimOp[]): SimulationResult {
   return { ticks: allTicks, events: allEvents, deadlockDetected, raceConditions };
 }
 
-/** 単一シミュレーション実行 */
+/**
+ * 単一のシミュレーション操作を実行する
+ * 初期状態を作成し、最大ティック数までループしてスレッドを実行する。
+ * 各ティックでsleepカウンタの更新、デッドロック検出、スケジューリング、
+ * 命令実行を順次行い、最後にレースコンディション検出を実行する。
+ * @param op - 実行するシミュレーション操作
+ * @returns シミュレーション結果（ティック履歴、イベント、検出された問題）
+ */
 export function executeSimulation(op: SimOp): SimulationResult {
   const state = createState(op);
   const ticks: TickResult[] = [];
@@ -608,7 +666,16 @@ export function executeSimulation(op: SimOp): SimulationResult {
   return { ticks, events: state.events, deadlockDetected, raceConditions };
 }
 
-/** TickResultを構築 */
+/**
+ * TickResultオブジェクトを構築する
+ * 現在のシミュレーション状態のスナップショット（ディープコピー）を作成する。
+ * @param state - 現在のシミュレーション状態
+ * @param runningTid - 実行中のスレッドTID（なければnull）
+ * @param instruction - 実行された命令（なければundefined）
+ * @param message - ティックのメッセージ
+ * @param warning - 警告メッセージ（任意）
+ * @returns 構築されたTickResultオブジェクト
+ */
 function buildTickResult(
   state: SimState, runningTid: Tid | null, instruction: ThreadInstr | undefined,
   message: string, warning?: string,
@@ -627,12 +694,20 @@ function buildTickResult(
 
 // ─── デフォルト設定 ───
 
-/** デフォルト設定 */
+/**
+ * デフォルトのシミュレーション設定を返す
+ * ラウンドロビン方式、タイムスライス3、最大200ティック
+ * @returns デフォルト設定のSimConfigオブジェクト
+ */
 export function defaultConfig(): SimConfig {
   return { scheduler: "round_robin", timeSlice: 3, maxTicks: 200 };
 }
 
-/** FIFO設定 */
+/**
+ * FIFO方式のシミュレーション設定を返す
+ * FIFO方式、タイムスライス1、最大200ティック
+ * @returns FIFO設定のSimConfigオブジェクト
+ */
 export function fifoConfig(): SimConfig {
   return { scheduler: "fifo", timeSlice: 1, maxTicks: 200 };
 }

@@ -1,3 +1,11 @@
+/**
+ * @module engine
+ * LLVM IR シミュレーションエンジン。
+ * IR の表示、最適化パス (定数畳み込み、DCE、命令結合、mem2reg、CFG 単純化)、
+ * 支配木構築、レジスタ割り当て (線形スキャン)、x86-64 コード生成、
+ * IR インタプリタ実行を提供する。
+ */
+
 import type {
   IRInsn, IROperand, IROpcode, BasicBlock, IRFunction, IRModule,
   PassResult, PassChange,
@@ -7,7 +15,11 @@ import type {
 } from "./types.js";
 import { typeToString } from "./types.js";
 
-/** オペランドを文字列に */
+/**
+ * IR オペランドを LLVM IR テキスト形式の文字列に変換する。
+ * @param o - 変換対象のオペランド (レジスタ、定数、ラベル、グローバル、undef)
+ * @returns LLVM IR 形式のオペランド文字列 (例: "i32 %x", "i32 42")
+ */
 function operandToString(o: IROperand): string {
   switch (o.kind) {
     case "reg": return `${typeToString(o.type)} %${o.name}`;
@@ -18,7 +30,13 @@ function operandToString(o: IROperand): string {
   }
 }
 
-/** 命令を IR テキストに */
+/**
+ * IR 命令を LLVM IR テキスト形式の文字列に変換する。
+ * 各オペコードに応じた適切なフォーマットで出力する。
+ * 除去済み命令はコメント形式で表示される。
+ * @param insn - 変換対象の IR 命令
+ * @returns LLVM IR 形式の命令文字列
+ */
 function insnToString(insn: IRInsn): string {
   if (insn.eliminated) return `  ; (eliminated) ${insn.id}`;
   const prefix = insn.result ? `  %${insn.result} = ` : "  ";
@@ -57,7 +75,12 @@ function insnToString(insn: IRInsn): string {
   }
 }
 
-/** 関数をIRテキストに */
+/**
+ * IR 関数全体を LLVM IR テキスト形式の文字列に変換する。
+ * define 宣言、パラメータ、全基本ブロックを含む完全な関数定義を出力する。
+ * @param fn - 変換対象の IR 関数
+ * @returns LLVM IR 形式の関数定義文字列
+ */
 function functionToString(fn: IRFunction): string {
   const params = fn.params.map((p) => `${typeToString(p.type)} %${p.name}`).join(", ");
   const body = fn.blocks.map((bb) => {
@@ -67,13 +90,26 @@ function functionToString(fn: IRFunction): string {
   return `define ${typeToString(fn.retType)} @${fn.name}(${params}) {\n${body}\n}`;
 }
 
-/** オペランドの値を取得 (定数解析用) */
+/**
+ * オペランドの定数値を取得する (定数解析/定数畳み込み用)。
+ * 即値定数の場合はその値を、レジスタの場合は環境から既知の定数値を返す。
+ * @param o - 対象オペランド
+ * @param env - 既知の定数値マップ (レジスタ名 → 定数値)
+ * @returns 定数値、または未知の場合は undefined
+ */
 function getConstValue(o: IROperand, env: Map<string, number>): number | undefined {
   if (o.kind === "const") return o.value;
   if (o.kind === "reg" && env.has(o.name)) return env.get(o.name);
   return undefined;
 }
 
+/**
+ * シミュレーションのメインエントリポイント。
+ * 操作列 (SimOp[]) を順次実行し、IR 定義、最適化パス、
+ * レジスタ割り当て、コード生成、IR 実行などを処理する。
+ * @param ops - 実行するシミュレーション操作の配列
+ * @returns シミュレーション結果 (イベントログ、統計、生成コード等)
+ */
 export function runSimulation(ops: SimOp[]): SimulationResult {
   const events: SimEvent[] = [];
   let step = 0;
@@ -90,10 +126,12 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
   const machineCode: MachineInsn[] = [];
   let execResult: { retValue: number; output: string[] } | undefined;
 
+  /** シミュレーションイベントを発行し、イベントログに追加する */
   function emit(type: EventType, desc: string, detail?: string): void {
     events.push({ step, type, description: desc, detail });
   }
 
+  /** モジュールから指定名の関数を検索する */
   function getFunction(name: string): IRFunction | undefined {
     return module.functions.find((f) => f.name === name);
   }
@@ -105,7 +143,13 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
 
   /** ──── 最適化パス ──── */
 
-  /** 定数畳み込み */
+  /**
+   * 定数畳み込みパス。
+   * コンパイル時に計算可能な定数式を検出し、その結果で置換する。
+   * 算術演算、ビット演算、整数比較に対応。
+   * @param fn - 最適化対象の関数
+   * @returns パス結果 (変更一覧と前後の IR)
+   */
   function runConstantFold(fn: IRFunction): PassResult {
     const irBefore = functionToString(fn);
     const changes: PassChange[] = [];
@@ -163,7 +207,13 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     return { pass: "constant_fold", description: "定数畳み込み — コンパイル時定数の計算", changes, irBefore, irAfter: functionToString(fn) };
   }
 
-  /** 死コード除去 (DCE) */
+  /**
+   * 死コード除去 (DCE) パス。
+   * use-def チェーンを解析し、結果が使用されておらず
+   * 副作用のない命令を除去する。
+   * @param fn - 最適化対象の関数
+   * @returns パス結果
+   */
   function runDCE(fn: IRFunction): PassResult {
     const irBefore = functionToString(fn);
     const changes: PassChange[] = [];
@@ -208,7 +258,12 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     return { pass: "dce", description: "死コード除去 — 未使用の計算を削除", changes, irBefore, irAfter: functionToString(fn) };
   }
 
-  /** 命令結合 (InstCombine) */
+  /**
+   * 命令結合 (InstCombine) パス。
+   * 代数的恒等式 (x+0=x, x*1=x) と強度削減 (2のべき乗乗算→シフト) を適用する。
+   * @param fn - 最適化対象の関数
+   * @returns パス結果
+   */
   function runInstCombine(fn: IRFunction): PassResult {
     const irBefore = functionToString(fn);
     const changes: PassChange[] = [];
@@ -267,7 +322,13 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     return { pass: "instcombine", description: "命令結合 — 代数的簡約と強度削減", changes, irBefore, irAfter: functionToString(fn) };
   }
 
-  /** mem2reg (alloca → SSA) */
+  /**
+   * mem2reg パス — alloca をSSA レジスタに昇格する。
+   * スタック上のメモリ (alloca/store/load) を SSA レジスタに変換し、
+   * 複数の定義が合流する箇所に phi ノードを挿入する。
+   * @param fn - 最適化対象の関数
+   * @returns パス結果
+   */
   function runMem2Reg(fn: IRFunction): PassResult {
     const irBefore = functionToString(fn);
     const changes: PassChange[] = [];
@@ -357,7 +418,13 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     return { pass: "mem2reg", description: "メモリ→レジスタ昇格 — alloca を SSA 変数に変換", changes, irBefore, irAfter: functionToString(fn) };
   }
 
-  /** CFG 単純化 */
+  /**
+   * CFG 単純化パス。
+   * 単一前任者を持つ空または小さなブロックを前任ブロックにマージし、
+   * 冗長な分岐を除去して制御フローグラフを簡素化する。
+   * @param fn - 最適化対象の関数
+   * @returns パス結果
+   */
   function runSimplifyCFG(fn: IRFunction): PassResult {
     const irBefore = functionToString(fn);
     const changes: PassChange[] = [];
@@ -390,7 +457,12 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     return { pass: "simplifycfg", description: "CFG単純化 — 空/冗長ブロックの除去", changes, irBefore, irAfter: functionToString(fn) };
   }
 
-  /** 支配木構築 */
+  /**
+   * 支配木を構築する。
+   * BFS 順で各ブロックの直接支配者 (idom) を計算し、
+   * 支配境界 (phi ノード挿入位置) を決定する。
+   * @param fn - 対象の関数
+   */
   function buildDomTree(fn: IRFunction): void {
     if (fn.blocks.length === 0) return;
     const entry = fn.blocks[0]!;
@@ -450,7 +522,14 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     }
   }
 
-  /** レジスタ割り当て (線形スキャン) */
+  /**
+   * 線形スキャンアルゴリズムによるレジスタ割り当て。
+   * 仮想レジスタの生存区間を計算し、干渉グラフを構築した上で、
+   * 物理レジスタへの割り当てとスピル (スタック退避) を決定する。
+   * @param fn - 対象の関数
+   * @param physRegs - 利用可能な物理レジスタの配列
+   * @returns レジスタ割り当て結果
+   */
   function runRegAlloc(fn: IRFunction, physRegs: string[]): RegAllocResult {
     // 生存区間の計算
     const intervals: LiveInterval[] = [];
@@ -558,11 +637,19 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
     return { intervals, interference, physRegs, coloring, spills };
   }
 
-  /** コード生成 (x86-64 風) */
+  /**
+   * x86-64 風アセンブリへのコード生成。
+   * IR 命令をレジスタ割り当て結果に基づいてマシン命令に変換する。
+   * System V AMD64 ABI に準拠した関数プロローグ/エピローグ、
+   * 引数渡し、戻り値処理を生成する。
+   * @param fn - 対象の関数
+   * @param allocResult - レジスタ割り当て結果
+   */
   function runCodegen(fn: IRFunction, allocResult: RegAllocResult): void {
     machineCode.length = 0;
     const regMap = allocResult.coloring;
 
+    /** 仮想レジスタ名から物理レジスタまたはスピルスロットの名前を取得する */
     function getReg(name: string): string {
       return regMap.get(name) ?? `[spill_${name}]`;
     }
@@ -662,7 +749,15 @@ export function runSimulation(ops: SimOp[]): SimulationResult {
       `LLVM IR → x86-64 アセンブリ。レジスタ割り当て結果を反映。ABI: System V AMD64 (引数=rdi,rsi,rdx,rcx,r8,r9, 戻り値=rax)`);
   }
 
-  /** IR 実行 (インタプリタ) */
+  /**
+   * IR インタプリタによる実行。
+   * LLVM IR 命令を逐次解釈実行し、制御フロー (分岐、ループ) を追跡する。
+   * alloca/store/load によるメモリ操作もシミュレートする。
+   * 最大 1000 ステップで打ち切り。
+   * @param fn - 実行対象の関数
+   * @param args - 関数引数の値
+   * @returns 戻り値と出力文字列
+   */
   function executeIR(fn: IRFunction, args: number[]): { retValue: number; output: string[] } {
     const env = new Map<string, number>();
     const output: string[] = [];

@@ -1,6 +1,14 @@
+/**
+ * @module ui/app
+ * TCP/HTTPシミュレーションのブラウザUI表示モジュール。
+ * プリセット選択、シミュレーション実行、結果のレンダリング
+ * （ソケット状態、統計、セグメント一覧、HTTP交換、イベントログ）を担当する。
+ */
+
 import { presets, runSimulation } from "../tcphttp/index.js";
 import type { SimulationResult, TcpSegment } from "../tcphttp/index.js";
 
+/** イベント種別ごとの表示色マッピング */
 const EVENT_COLORS: Record<string, string> = {
   socket_create: "#7f8c8d", bind: "#7f8c8d", listen: "#7f8c8d",
   connect: "#3498db", accept: "#3498db",
@@ -18,12 +26,18 @@ const EVENT_COLORS: Record<string, string> = {
   http_parse: "#8e44ad", keep_alive: "#16a085", close: "#555",
 };
 
+/** 通信方向ごとの表示色マッピング */
 const DIR_COLORS: Record<string, string> = {
   "client→server": "#3498db",
   "server→client": "#e67e22",
   "local": "#7f8c8d",
 };
 
+/**
+ * TCPセグメントのフラグを "SYN+ACK" のような文字列に変換する。
+ * @param seg - TCPセグメント
+ * @returns フラグ文字列（例: "SYN+ACK"）
+ */
 function flagStr(seg: TcpSegment): string {
   const parts: string[] = [];
   if (seg.flags.syn) parts.push("SYN");
@@ -34,15 +48,25 @@ function flagStr(seg: TcpSegment): string {
   return parts.join("+");
 }
 
+/**
+ * TCP/HTTPシミュレーションのUIアプリケーションクラス。
+ * ブラウザ上でプリセット選択とシミュレーション結果の可視化を行う。
+ */
 export class TcpHttpApp {
+  /** UIのルートコンテナ要素 */
   private container!: HTMLElement;
 
+  /**
+   * アプリケーションを初期化し、指定されたDOM要素にUIを描画する。
+   * @param el - UIを描画するルートDOM要素
+   */
   init(el: HTMLElement | null): void {
     if (!el) return;
     this.container = el;
     this.render();
   }
 
+  /** UIの初期HTMLとCSSを生成し、プリセット選択イベントをバインドする */
   private render(): void {
     this.container.innerHTML = `
       <style>
@@ -108,6 +132,10 @@ export class TcpHttpApp {
     this.runPreset(0);
   }
 
+  /**
+   * 指定されたプリセットでシミュレーションを実行し、全パネルを更新する。
+   * @param index - プリセット配列のインデックス
+   */
   private runPreset(index: number): void {
     const preset = presets[index]!;
     const result = runSimulation(preset.clientAddr, preset.serverAddr, preset.ops);
@@ -119,6 +147,11 @@ export class TcpHttpApp {
     this.renderEvents(result);
   }
 
+  /**
+   * TCPソケット状態に対応する表示色を返す。
+   * @param state - TCP状態文字列
+   * @returns CSSカラーコード
+   */
   private stateColor(state: string): string {
     const colors: Record<string, string> = {
       CLOSED: "#555", LISTEN: "#7f8c8d", SYN_SENT: "#e67e22", SYN_RECEIVED: "#f39c12",
@@ -128,6 +161,7 @@ export class TcpHttpApp {
     return colors[state] ?? "#555";
   }
 
+  /** クライアント・サーバー双方のソケット状態パネルを描画する */
   private renderSockets(result: SimulationResult): void {
     const el = this.container.querySelector("#socket-panel")!;
     let html = `<h2>Socket State</h2>`;
@@ -150,6 +184,7 @@ export class TcpHttpApp {
     el.innerHTML = html;
   }
 
+  /** 統計情報パネル（セグメント数、HTTP交換数など）を描画する */
   private renderStats(result: SimulationResult): void {
     const el = this.container.querySelector("#stats-panel")!;
     const s = result.stats;
@@ -169,6 +204,12 @@ export class TcpHttpApp {
       </div>`;
   }
 
+  /**
+   * シーケンス番号のタイムラインをHTML文字列として生成する。
+   * クライアント側セグメントは左寄せ、サーバー側は右寄せで表示。
+   * @param result - シミュレーション結果
+   * @returns タイムラインのHTML文字列
+   */
   private renderTimeline(result: SimulationResult): string {
     if (result.segments.length === 0) return `<div style="color:#555;font-size:11px;">セグメントなし</div>`;
     let html = `<div style="margin-top:6px;">`;
@@ -190,6 +231,7 @@ export class TcpHttpApp {
     return html;
   }
 
+  /** TCPセグメント一覧テーブルを描画する */
   private renderSegments(result: SimulationResult): void {
     const el = this.container.querySelector("#segments-panel")!;
     if (result.segments.length === 0) {
@@ -218,6 +260,7 @@ export class TcpHttpApp {
     el.innerHTML = html;
   }
 
+  /** HTTP交換（リクエスト/レスポンス）パネルを描画する */
   private renderHttp(result: SimulationResult): void {
     const el = this.container.querySelector("#http-panel")!;
     if (result.httpExchanges.length === 0) {
@@ -247,6 +290,7 @@ export class TcpHttpApp {
     el.innerHTML = html;
   }
 
+  /** シミュレーションイベントログパネルを描画する */
   private renderEvents(result: SimulationResult): void {
     const el = this.container.querySelector("#events-panel")!;
     let html = `<h2>Events (${result.events.length})</h2><div class="events-scroll">`;

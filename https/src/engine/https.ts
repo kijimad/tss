@@ -189,7 +189,11 @@ export interface SimulationResult {
 
 // ── 暗号ユーティリティ (教育用簡易実装) ──
 
-/** 擬似乱数 hex 文字列を生成する */
+/**
+ * 擬似乱数 hex 文字列を生成する
+ * @param bytes 生成するバイト数 (出力は bytes * 2 文字の hex 文字列)
+ * @returns hex エンコードされた擬似乱数文字列
+ */
 export function randomHex(bytes: number): string {
   const chars = "0123456789abcdef";
   let result = "";
@@ -199,7 +203,12 @@ export function randomHex(bytes: number): string {
   return result;
 }
 
-/** 簡易ハッシュ (教育用、SHA-256 の代わり) */
+/**
+ * 簡易ハッシュ関数 (教育用、SHA-256 の代わり)
+ * FNV-1a ベースのハッシュを 32 バイトに拡張して返す
+ * @param input ハッシュ対象の入力文字列
+ * @returns 64 文字の hex ハッシュ値
+ */
 export function simpleHash(input: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
@@ -218,7 +227,14 @@ export function simpleHash(input: string): string {
   return result;
 }
 
-/** PRF (擬似乱数関数) — マスターシークレットの導出 */
+/**
+ * PRF (擬似乱数関数) — TLS のマスターシークレットや鍵ブロックの導出に使用
+ * @param secret 秘密値 (プリマスターシークレット等)
+ * @param label 導出ラベル ("master secret" や "key expansion" など)
+ * @param seed シード値 (クライアントランダム + サーバーランダム等)
+ * @param length 出力バイト数
+ * @returns 指定長の hex 文字列
+ */
 export function prf(secret: string, label: string, seed: string, length: number): string {
   let result = "";
   let a = simpleHash(label + seed);
@@ -229,7 +245,12 @@ export function prf(secret: string, label: string, seed: string, length: number)
   return result.slice(0, length * 2);
 }
 
-/** 簡易 XOR 暗号化 (教育用、AES-GCM の代わり) */
+/**
+ * 簡易 XOR 暗号化 (教育用、AES-GCM の代わり)
+ * @param plaintext 平文テキスト
+ * @param key 暗号鍵 (hex 文字列)
+ * @returns 暗号化された hex 文字列
+ */
 export function xorEncrypt(plaintext: string, key: string): string {
   let result = "";
   for (let i = 0; i < plaintext.length; i++) {
@@ -240,7 +261,12 @@ export function xorEncrypt(plaintext: string, key: string): string {
   return result;
 }
 
-/** XOR 復号 */
+/**
+ * XOR 復号 (xorEncrypt の逆操作)
+ * @param cipherHex 暗号化された hex 文字列
+ * @param key 復号鍵 (hex 文字列)
+ * @returns 復号された平文テキスト
+ */
 export function xorDecrypt(cipherHex: string, key: string): string {
   let result = "";
   for (let i = 0; i < cipherHex.length; i += 2) {
@@ -251,12 +277,23 @@ export function xorDecrypt(cipherHex: string, key: string): string {
   return result;
 }
 
-/** HMAC 計算 (簡易) */
+/**
+ * HMAC 計算 (簡易実装)
+ * TLS ハンドシェイクの Finished メッセージ検証に使用する
+ * @param key HMAC 鍵
+ * @param data 認証対象データ
+ * @returns HMAC 値 (hex 文字列)
+ */
 export function hmac(key: string, data: string): string {
   return simpleHash(key + data);
 }
 
-/** ECDHE 鍵交換のシミュレーション (楕円曲線の概念を再現) */
+/**
+ * ECDHE (楕円曲線 Diffie-Hellman Ephemeral) 鍵交換のシミュレーション
+ * 楕円曲線上の離散対数問題を利用した鍵共有を概念的に再現する。
+ * 実際の楕円曲線演算は行わず、ハッシュで代替している (教育用)。
+ * @returns クライアント/サーバーの公開鍵・秘密鍵と共有秘密
+ */
 export function simulateECDHE(): { clientPrivate: string; clientPublic: string; serverPrivate: string; serverPublic: string; sharedSecret: string } {
   const clientPrivate = randomHex(32);
   const serverPrivate = randomHex(32);
@@ -267,7 +304,12 @@ export function simulateECDHE(): { clientPrivate: string; clientPublic: string; 
   return { clientPrivate, clientPublic, serverPrivate, serverPublic, sharedSecret };
 }
 
-/** DHE 鍵交換のシミュレーション */
+/**
+ * DHE (Diffie-Hellman Ephemeral) 鍵交換のシミュレーション
+ * 有限体上の離散対数問題を利用した鍵共有を概念的に再現する。
+ * ECDHE より計算コストが高いが、同様に前方秘匿性 (PFS) を提供する。
+ * @returns 素数 p、生成元 g、公開鍵、共有秘密
+ */
 export function simulateDHE(): { p: string; g: string; clientPublic: string; serverPublic: string; sharedSecret: string } {
   const p = randomHex(32);
   const g = "02";
@@ -279,7 +321,13 @@ export function simulateDHE(): { p: string; g: string; clientPublic: string; ser
   return { p, g, clientPublic, serverPublic, sharedSecret };
 }
 
-/** 文字列を hex ダンプ形式にする */
+/**
+ * 文字列を hex ダンプ形式に変換する
+ * デバッグ表示用に、バイト値と ASCII 表示を並べて出力する
+ * @param str 変換対象の文字列
+ * @param maxBytes 表示する最大バイト数 (超過分は省略表示)
+ * @returns hex ダンプ形式の文字列
+ */
 export function hexDump(str: string, maxBytes: number = 48): string {
   const bytes: string[] = [];
   for (let i = 0; i < Math.min(str.length, maxBytes); i++) {
@@ -297,7 +345,14 @@ export function hexDump(str: string, maxBytes: number = 48): string {
 
 // ── 暗号スイートネゴシエーション ──
 
-/** クライアントとサーバーの暗号スイートをネゴシエーションする */
+/**
+ * クライアントとサーバーの暗号スイートをネゴシエーションする
+ * クライアントが提示した順序で候補を検索し、TLS バージョンとの
+ * 互換性を確認した上で最初に一致したスイートを選択する。
+ * @param clientSuites クライアントが提示する暗号スイート名のリスト (優先度順)
+ * @param tlsVersion 使用する TLS バージョン
+ * @returns 合意された暗号スイート、見つからなければ undefined
+ */
 export function negotiateCipherSuite(
   clientSuites: string[],
   tlsVersion: TlsVersion,
@@ -314,7 +369,16 @@ export function negotiateCipherSuite(
 
 // ── 証明書検証 ──
 
-/** 証明書チェーンを検証する */
+/**
+ * 証明書チェーンを検証する
+ *
+ * リーフ証明書からルート証明書まで辿り、以下を確認する:
+ * - 各証明書の発行者と次の証明書のサブジェクトが一致すること
+ * - 中間証明書が CA 証明書であること
+ * - ルート証明書が自己署名 (トラストアンカー) であること
+ * @param chain 検証する証明書チェーン (リーフ→中間→ルートの順)
+ * @returns 検証結果 (valid: 成功/失敗、error: エラーメッセージ、steps: 検証ステップ)
+ */
 export function verifyCertChain(chain: Certificate[]): { valid: boolean; error?: string; steps: string[] } {
   const steps: string[] = [];
   if (chain.length === 0) {
@@ -358,9 +422,24 @@ export function verifyCertChain(chain: Certificate[]): { valid: boolean; error?:
 
 // ── HTTPS シミュレーター ──
 
+/**
+ * HTTPS 接続シミュレータークラス
+ *
+ * TCP 3-way ハンドシェイク → TLS ハンドシェイク → 暗号化 HTTP 通信 → 切断
+ * の一連の流れをエミュレーションし、各ステップのトレースイベントを生成する。
+ * TLS 1.2 / 1.3 の両方に対応し、セッション再開や証明書検証エラーなど
+ * 各種シナリオをシミュレーションできる。
+ */
 export class HttpsSimulator {
 
-  /** HTTPS 接続をシミュレーションする */
+  /**
+   * HTTPS 接続全体をシミュレーションする
+   *
+   * TCP 接続確立から TLS ハンドシェイク、HTTP リクエスト/レスポンスの
+   * 暗号化通信、そして切断までの一連の流れを実行する。
+   * @param config HTTPS 接続の設定 (TLS バージョン、暗号スイート、証明書など)
+   * @returns シミュレーション結果 (トレースイベント、セッション情報、統計)
+   */
   simulate(config: HttpsConfig): SimulationResult {
     const events: TraceEvent[] = [];
     let time = 0;
@@ -774,7 +853,13 @@ export class HttpsSimulator {
     return this.buildResult(events, session, true, undefined, time, handshakeTime, roundTrips, bytesSent, bytesReceived, encryptedReq, encryptedRes);
   }
 
-  /** セッション再開のシミュレーション */
+  /**
+   * セッション再開 (Abbreviated Handshake) のシミュレーション
+   *
+   * 以前のセッション情報を使い、フルハンドシェイクより短い手順で
+   * TLS 接続を再確立する。証明書交換や鍵交換を省略できるため、
+   * 1-RTT 分の時間を節約できる。
+   */
   private simulateSessionResumption(
     config: HttpsConfig,
     events: TraceEvent[],
@@ -913,6 +998,7 @@ export class HttpsSimulator {
     return this.buildResult(events, session, true, undefined, time, handshakeTime, roundTrips, bytesSent, bytesReceived, encryptedReq, encryptedRes);
   }
 
+  /** シミュレーション結果オブジェクトを構築するヘルパーメソッド */
   private buildResult(
     events: TraceEvent[],
     session: TlsSession | null,
@@ -932,7 +1018,12 @@ export class HttpsSimulator {
 
 // ── プリセット用データ ──
 
-/** サンプル証明書チェーン */
+/**
+ * 正常な証明書チェーンを生成する (テスト・プリセット用)
+ * リーフ証明書 → 中間 CA → ルート CA の 3 階層構成
+ * @param hostname リーフ証明書のサブジェクト名 (ホスト名)
+ * @returns 3 つの証明書からなる正常なチェーン
+ */
 export function createValidCertChain(hostname: string): Certificate[] {
   return [
     {
@@ -971,7 +1062,12 @@ export function createValidCertChain(hostname: string): Certificate[] {
   ];
 }
 
-/** 不正な証明書チェーン */
+/**
+ * 不正な証明書チェーンを生成する (エラーケーステスト用)
+ * リーフ証明書の発行者とルート証明書のサブジェクトが一致しないため、
+ * 証明書チェーン検証で発行者不一致エラーとなる
+ * @returns 2 つの証明書からなる不正なチェーン (発行者不一致)
+ */
 export function createInvalidCertChain(): Certificate[] {
   return [
     {

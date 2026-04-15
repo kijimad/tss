@@ -1,17 +1,37 @@
-/* UNIX スレッド シミュレーター 型定義 */
+/**
+ * UNIX スレッド シミュレーター 型定義モジュール
+ *
+ * POSIXスレッド（pthread）の動作をシミュレートするために必要な
+ * 全ての型定義を提供する。スレッド、同期プリミティブ、共有メモリ、
+ * 命令セット、シミュレーション設定・結果の型を含む。
+ */
 
 // ─── スレッド ───
 
-/** スレッド状態 */
+/**
+ * スレッド状態
+ * - created: 生成直後（まだスケジュール対象外）
+ * - ready: 実行可能（スケジューラによる選択待ち）
+ * - running: 現在CPU上で実行中
+ * - blocked: 同期オブジェクト等で待機中
+ * - terminated: 実行完了済み
+ */
 export type ThreadState = "created" | "ready" | "running" | "blocked" | "terminated";
 
-/** ブロック理由 */
+/**
+ * ブロック理由
+ * スレッドがblocked状態になった原因を示す
+ */
 export type BlockReason = "mutex" | "condvar" | "join" | "rwlock" | "barrier" | "sleep";
 
 /** スレッドID */
 export type Tid = number;
 
-/** スレッド */
+/**
+ * スレッド
+ * POSIXスレッドの状態を表現するインターフェース。
+ * スレッドID、状態、プログラムカウンタ、ローカル変数などを保持する。
+ */
 export interface Thread {
   tid: Tid;
   name: string;
@@ -96,7 +116,11 @@ export interface SharedVar {
 
 // ─── スレッド命令 ───
 
-/** スレッド命令 */
+/**
+ * スレッド命令
+ * シミュレーション中にスレッドが実行可能な全ての操作を定義する判別共用体型。
+ * スレッド生成、同期プリミティブ操作、共有変数アクセス、制御フローを含む。
+ */
 export type ThreadInstr =
   | { op: "create"; name: string; instructions: ThreadInstr[] }
   | { op: "mutex_init"; id: string; recursive?: boolean }
@@ -125,7 +149,12 @@ export type ThreadInstr =
 
 // ─── シミュレーション ───
 
-/** スケジューラ種別 */
+/**
+ * スケジューラ種別
+ * - round_robin: タイムスライスベースのラウンドロビン方式
+ * - priority: 優先度ベース（TIDが小さいほど高優先度）
+ * - fifo: 先着順実行（プリエンプションなし）
+ */
 export type SchedulerType = "round_robin" | "priority" | "fifo";
 
 /** シミュレーション設定 */
@@ -138,7 +167,11 @@ export interface SimConfig {
   maxTicks: number;
 }
 
-/** 1ティックの実行結果 */
+/**
+ * 1ティックの実行結果
+ * シミュレーションの各ステップにおけるスナップショットを保持する。
+ * 全スレッド、同期オブジェクト、共有変数の状態を含む。
+ */
 export interface TickResult {
   tick: number;
   /** 実行スレッド */
@@ -160,7 +193,10 @@ export interface TickResult {
   warning?: string;
 }
 
-/** シミュレーション操作 */
+/**
+ * シミュレーション操作
+ * 1回のシミュレーション実行に必要な設定と命令を定義する。
+ */
 export interface SimOp {
   type: "execute";
   config: SimConfig;
@@ -175,7 +211,11 @@ export type EventType =
   | "create" | "terminate" | "schedule" | "lock" | "unlock"
   | "wait" | "signal" | "race" | "deadlock" | "info" | "warn";
 
-/** イベント */
+/**
+ * イベント
+ * シミュレーション中に発生したイベントの記録。
+ * デバッグやログ表示に使用する。
+ */
 export interface SimEvent {
   type: EventType;
   tick: number;
@@ -183,7 +223,11 @@ export interface SimEvent {
   detail?: string;
 }
 
-/** シミュレーション結果 */
+/**
+ * シミュレーション結果
+ * シミュレーション全体の実行結果を保持する。
+ * 全ティックの履歴、イベントログ、検出された問題を含む。
+ */
 export interface SimulationResult {
   ticks: TickResult[];
   events: SimEvent[];
@@ -193,7 +237,11 @@ export interface SimulationResult {
   raceConditions: { varName: string; tids: Tid[] }[];
 }
 
-/** プリセット */
+/**
+ * プリセット
+ * UIのセレクトボックスから選択可能な実験シナリオの定義。
+ * 名前、説明、およびSimOp配列を生成するビルダ関数を持つ。
+ */
 export interface Preset {
   name: string;
   description: string;

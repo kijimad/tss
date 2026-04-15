@@ -1,19 +1,45 @@
 /**
  * モジュラー算術ユーティリティ
- * RSA暗号の基礎となる数学関数を提供する
+ *
+ * RSA暗号（非対称暗号方式）の基礎となる数学関数を提供する。
+ * 公開鍵暗号基盤（PKI）では、RSAの鍵生成・暗号化・署名すべてが
+ * モジュラー算術（剰余演算）に依存している。
+ *
+ * このモジュールが提供する関数:
+ * - modPow: べき乗剰余（RSA暗号化・復号・署名の中核演算）
+ * - gcd: 最大公約数（公開指数 e の選定に使用）
+ * - modInverse: モジュラー逆元（秘密指数 d の計算に使用）
+ * - isPrime / generatePrimes / randomPrime: 素数関連（鍵生成用）
+ * - simpleHash: 簡易ハッシュ（署名対象のダイジェスト生成用）
  */
 
-/** べき乗剰余: (base^exp) mod mod を効率的に計算する */
+/**
+ * べき乗剰余: (base^exp) mod mod を効率的に計算する。
+ *
+ * 繰り返し二乗法（binary exponentiation）を使用し、
+ * 巨大な指数でも O(log exp) 回の乗算で計算を完了する。
+ * RSAでは暗号化（m^e mod n）や復号（c^d mod n）でこの演算が必要になる。
+ *
+ * @param base - 底（平文またはメッセージのハッシュ値）
+ * @param exp - 指数（公開指数 e または秘密指数 d）
+ * @param mod - 法（モジュラス n = p * q）
+ * @returns (base^exp) mod mod の計算結果
+ */
 export function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  // mod が 1 の場合、いかなる数も mod 1 = 0
   if (mod === 1n) return 0n;
   let result = 1n;
+  // 負の値にも対応するため、base を正の剰余に正規化する
   base = ((base % mod) + mod) % mod;
   while (exp > 0n) {
-    // 指数の最下位ビットが1なら結果に掛ける
+    // 繰り返し二乗法: 指数を2進数として分解し、
+    // 最下位ビットが1のとき現在の base を結果に掛け合わせる
     if (exp % 2n === 1n) {
       result = (result * base) % mod;
     }
+    // 指数を1ビット右シフト（2で割る）
     exp = exp >> 1n;
+    // base を二乗して次のビット位置に対応させる
     base = (base * base) % mod;
   }
   return result;

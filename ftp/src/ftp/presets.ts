@@ -1,3 +1,10 @@
+/**
+ * FTPシミュレーション用プリセット定義モジュール。
+ * ログイン、ディレクトリ操作、ファイル転送、エラーハンドリングなど
+ * 様々なFTPセッションシナリオのプリセットを提供する。
+ * @module ftp/presets
+ */
+
 import type { Preset, FsEntry, FtpUser } from "./types.js";
 
 /** テスト用ユーザー */
@@ -6,7 +13,11 @@ const USERS: FtpUser[] = [
   { username: "guest", password: "guest", homeDir: "/home/guest" },
 ];
 
-/** テスト用ファイルシステム */
+/**
+ * プリセット用の仮想ファイルシステムを生成する。
+ * ルートディレクトリ配下にhomeディレクトリ（admin, guest）とpubディレクトリを持つ。
+ * @returns ルートディレクトリのFsEntryツリー
+ */
 function makeFs(): FsEntry {
   return {
     name: "/", type: "directory", size: 0, modified: "2026-01-01 00:00",
@@ -73,6 +84,11 @@ function makeFs(): FsEntry {
   };
 }
 
+/**
+ * FTPシミュレーション用プリセット一覧。
+ * 基本ログイン、ディレクトリ操作、ファイル転送、エラーハンドリングなど
+ * 10種類の典型的なFTPセッションシナリオを含む。
+ */
 export const presets: Preset[] = [
   // 1. 基本ログイン＆PWD
   {

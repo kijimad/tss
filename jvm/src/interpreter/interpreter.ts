@@ -10,7 +10,16 @@
 import { OpCode, OP_NAMES, ConstTag } from "../classfile/types.js";
 import type { JvmRuntime, JvmValue, Frame, JvmObject, JvmArray } from "../runtime/runtime.js";
 
-// 1命令実行して true を返す。実行終了なら false
+/**
+ * バイトコードを1命令だけ実行する
+ *
+ * フェッチ→デコード→実行のサイクルを1回行う。
+ * 現在のフレームのプログラムカウンタが指す命令を読み取り、
+ * 対応する処理を実行してPCを進める。
+ *
+ * @param rt - JVMランタイムインスタンス
+ * @returns 実行を継続できる場合true、終了した場合false
+ */
 export function step(rt: JvmRuntime): boolean {
   const frame = rt.currentFrame();
   if (frame === undefined) return false;
@@ -198,7 +207,7 @@ export function step(rt: JvmRuntime): boolean {
 
     // === フィールドアクセス ===
     case OpCode.getstatic: {
-      const idx = readU16();
+      readU16();
       // System.out 等の静的フィールド → ダミー値
       rt.push(frame, null);
       break;
@@ -287,7 +296,20 @@ export function step(rt: JvmRuntime): boolean {
   return rt.callStack.length > 0;
 }
 
-// 組み込みメソッド（System.out.println 等）
+/**
+ * 組み込みメソッドを処理する
+ *
+ * System.out.println、StringBuilder、String.valueOf など、
+ * JVMの標準ライブラリメソッドをネイティブに実装する。
+ * 対象メソッドが組み込みとして処理された場合trueを返す。
+ *
+ * @param rt - JVMランタイムインスタンス
+ * @param frame - 現在のスタックフレーム
+ * @param className - 呼び出し先クラス名
+ * @param methodName - 呼び出し先メソッド名
+ * @param descriptor - メソッドディスクリプタ
+ * @returns 組み込みとして処理できた場合true
+ */
 function handleBuiltin(rt: JvmRuntime, frame: Frame, className: string, methodName: string, descriptor: string): boolean {
   // System.out.println (スタック: [this, arg] → this=System.out(null), arg=表示する値)
   if (className === "java/io/PrintStream" && methodName === "println") {
@@ -339,7 +361,16 @@ function handleBuiltin(rt: JvmRuntime, frame: Frame, className: string, methodNa
   return false;
 }
 
-// 引数の数をディスクリプタから計算
+/**
+ * メソッドディスクリプタから引数の数を計算する
+ *
+ * ディスクリプタ文字列（例: "(ILjava/lang/String;)V"）を解析し、
+ * パラメータの個数を返す。オブジェクト型はセミコロンまで、
+ * 配列型は次元を含めて1引数としてカウントする。
+ *
+ * @param descriptor - メソッドディスクリプタ文字列
+ * @returns 引数の個数
+ */
 function countParams(descriptor: string): number {
   let count = 0;
   let i = 1; // '(' の次から
@@ -360,19 +391,37 @@ function countParams(descriptor: string): number {
   return count;
 }
 
+/**
+ * JVM値を32ビット整数に変換する
+ * @param v - 変換元のJVM値
+ * @returns 32ビット整数値（ビットOR 0で切り捨て）
+ */
 function toInt(v: JvmValue): number {
   if (typeof v === "number") return v | 0;
   if (typeof v === "bigint") return Number(v) | 0;
   return 0;
 }
 
+/**
+ * JVM値をBigInt（long型相当）に変換する
+ * @param v - 変換元のJVM値
+ * @returns BigInt値
+ */
 function toBigInt(v: JvmValue): bigint {
   if (typeof v === "bigint") return v;
   if (typeof v === "number") return BigInt(v);
   return 0n;
 }
 
-// 複数サイクル実行
+/**
+ * 複数サイクルを連続実行する
+ *
+ * 指定された最大サイクル数まで、またはプログラムが終了するまで
+ * step()を繰り返し呼び出す。無限ループ防止のため上限を設ける。
+ *
+ * @param rt - JVMランタイムインスタンス
+ * @param maxCycles - 最大実行サイクル数（デフォルト: 10000）
+ */
 export function run(rt: JvmRuntime, maxCycles = 10000): void {
   let executed = 0;
   while (executed < maxCycles && step(rt)) {

@@ -131,13 +131,35 @@ export interface SimResult {
 
 // ── シミュレーター ──
 
+/**
+ * プロセスシミュレータークラス
+ *
+ * Unix ライクなプロセス管理をエミュレートする。
+ * fork / exec / wait / exit / signal / pipe などのシステムコールを
+ * 順番に処理し、各操作のイベントログを生成する。
+ */
 export class ProcessSimulator {
+  /** プロセステーブル (PID → Process) */
   private procs: Map<number, Process> = new Map();
+  /** 作成されたパイプ一覧 */
   private pipes: Pipe[] = [];
+  /** 次に割り当てる PID */
   private nextPid = 1;
+  /** 次に割り当てるパイプ ID */
   private nextPipeId = 1;
+  /** 次に割り当てるファイルディスクリプタ番号 (0,1,2 は標準入出力で予約済み) */
   private nextFd = 3;
 
+  /**
+   * シミュレーションを実行する
+   *
+   * 初期プロセスを作成した後、指定されたシステムコール操作を順番に実行し、
+   * 全イベントログとプロセス状態を返す。
+   *
+   * @param initProc - 初期プロセスの設定 (PID=1 として作成される)
+   * @param ops - 実行するシステムコール操作の配列
+   * @returns シミュレーション結果 (イベント、プロセス一覧、パイプ、プロセスツリー)
+   */
   simulate(initProc: Omit<Process, "pid" | "ppid" | "children" | "state" | "cpuTime" | "exitCode">, ops: SyscallOp[]): SimResult {
     const events: SimEvent[] = [];
     let time = 0;
@@ -174,6 +196,13 @@ export class ProcessSimulator {
     return { events, processes: [...this.procs.values()], pipes: this.pipes, processTree, totalTime: time };
   }
 
+  /**
+   * fork システムコールを処理する
+   *
+   * 親プロセスを複製して子プロセスを作成する。
+   * メモリマップは CoW (Copy-on-Write) としてマークされ、
+   * ファイルディスクリプタは子に継承される。
+   */
   private handleFork(op: Extract<SyscallOp, { op: "fork" }>, time: number, events: SimEvent[]): void {
     const parent = this.procs.get(op.parentPid);
     if (!parent) { events.push({ time, layer: "Syscall", type: "error", detail: `fork 失敗: PID=${op.parentPid} が存在しない` }); return; }
@@ -200,6 +229,13 @@ export class ProcessSimulator {
     events.push({ time, layer: "Signal", type: "signal", detail: `SIGCHLD → PID=${parent.pid} (子プロセス作成)`, pid: parent.pid });
   }
 
+  /**
+   * exec システムコールを処理する
+   *
+   * プロセスの実行バイナリを新しいプログラムに置換する。
+   * アドレス空間は完全に再構築され、シグナルハンドラはリセットされる。
+   * ファイルディスクリプタは close-on-exec 以外そのまま継承される。
+   */
   private handleExec(op: Extract<SyscallOp, { op: "exec" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -220,6 +256,12 @@ export class ProcessSimulator {
     events.push({ time, layer: "FD", type: "fd", detail: `FD はそのまま継承 (close-on-exec 以外)`, pid: op.pid });
   }
 
+  /**
+   * exit システムコールを処理する
+   *
+   * プロセスを zombie 状態に遷移させ、全 FD をクローズする。
+   * 親プロセスに SIGCHLD を送信し、子プロセスがいれば init (PID=1) に再配置する。
+   */
   private handleExit(op: Extract<SyscallOp, { op: "exit" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -248,6 +290,12 @@ export class ProcessSimulator {
     }
   }
 
+  /**
+   * wait システムコールを処理する
+   *
+   * zombie 状態の子プロセスを回収して terminated に遷移させる。
+   * 対象の zombie がなければ、呼び出し元プロセスを sleeping (ブロック) 状態にする。
+   */
   private handleWait(op: Extract<SyscallOp, { op: "wait" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -267,6 +315,13 @@ export class ProcessSimulator {
     }
   }
 
+  /**
+   * kill システムコールを処理する
+   *
+   * 対象プロセスにシグナルを送信する。
+   * SIGKILL/SIGSTOP は捕捉不可で強制的に動作する。
+   * それ以外はカスタムハンドラ → デフォルト動作の順で処理される。
+   */
   private handleKill(op: Extract<SyscallOp, { op: "kill" }>, time: number, events: SimEvent[]): void {
     const target = this.procs.get(op.targetPid);
     if (!target) { events.push({ time, layer: "Syscall", type: "error", detail: `kill: PID=${op.targetPid} が存在しない`, pid: op.senderPid }); return; }
@@ -316,6 +371,12 @@ export class ProcessSimulator {
     }
   }
 
+  /**
+   * pipe システムコールを処理する
+   *
+   * 読み取り用と書き込み用のファイルディスクリプタペアを作成し、
+   * 呼び出し元プロセスの FD テーブルに追加する。
+   */
   private handlePipe(op: Extract<SyscallOp, { op: "pipe" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -331,6 +392,11 @@ export class ProcessSimulator {
     events.push({ time, layer: "Syscall", type: "ipc", detail: `pipe(): fd[${readFd}](read), fd[${writeFd}](write) → "${op.name}"`, pid: op.pid });
   }
 
+  /**
+   * write システムコールを処理する
+   *
+   * 指定された FD にデータを書き込む。パイプの場合はバッファにデータを追加する。
+   */
   private handleWrite(op: Extract<SyscallOp, { op: "write" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -344,6 +410,11 @@ export class ProcessSimulator {
     events.push({ time, layer: "IPC", type: "ipc", detail: `write(fd${op.fd}, "${op.data.slice(0, 40)}${op.data.length > 40 ? "..." : ""}", ${op.data.length}) → ${fd.path}`, pid: op.pid });
   }
 
+  /**
+   * read システムコールを処理する
+   *
+   * 指定された FD からデータを読み取る。パイプの場合はバッファから先頭データを取り出す。
+   */
   private handleRead(op: Extract<SyscallOp, { op: "read" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -358,6 +429,12 @@ export class ProcessSimulator {
     events.push({ time, layer: "IPC", type: "ipc", detail: `read(fd${op.fd}) → "${data.slice(0, 40)}" from ${fd.path}`, pid: op.pid });
   }
 
+  /**
+   * dup2 システムコールを処理する
+   *
+   * ファイルディスクリプタを複製する。newFd が既に存在する場合は先にクローズされる。
+   * パイプラインで stdin/stdout をリダイレクトする際に使用される。
+   */
   private handleDup2(op: Extract<SyscallOp, { op: "dup2" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -369,6 +446,11 @@ export class ProcessSimulator {
     events.push({ time, layer: "FD", type: "fd", detail: `dup2(${op.oldFd}, ${op.newFd}): fd${op.newFd} → ${src.path}`, pid: op.pid });
   }
 
+  /**
+   * close システムコールを処理する
+   *
+   * 指定された FD をプロセスの FD テーブルから削除する。
+   */
   private handleClose(op: Extract<SyscallOp, { op: "close" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -377,6 +459,11 @@ export class ProcessSimulator {
     events.push({ time, layer: "FD", type: "fd", detail: `close(${op.fd})${fd ? ` — ${fd.path}` : ""}`, pid: op.pid });
   }
 
+  /**
+   * sleep システムコールを処理する
+   *
+   * プロセスを一時的に sleeping 状態にし、指定ミリ秒後に起床 (ready) させる。
+   */
   private handleSleep(op: Extract<SyscallOp, { op: "sleep" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -387,6 +474,11 @@ export class ProcessSimulator {
     events.push({ time: time + op.ms, layer: "Sched", type: "state", detail: `PID=${op.pid} 起床 → ready (SIGALRM)`, pid: op.pid });
   }
 
+  /**
+   * nice システムコールを処理する
+   *
+   * プロセスの優先度 (nice 値) を変更する。値は -20 (最高優先) 〜 19 (最低優先) にクランプされる。
+   */
   private handleNice(op: Extract<SyscallOp, { op: "nice" }>, time: number, events: SimEvent[]): void {
     const proc = this.procs.get(op.pid);
     if (!proc) return;
@@ -395,6 +487,12 @@ export class ProcessSimulator {
     events.push({ time, layer: "Sched", type: "info", detail: `nice: PID=${op.pid} 優先度 ${old} → ${proc.nice}`, pid: op.pid });
   }
 
+  /**
+   * スケジューラを実行する
+   *
+   * CFS (Completely Fair Scheduler) 風に nice 値でソートし、
+   * ready/running 状態のプロセスに CPU 時間を割り当てる。
+   */
   private handleSchedule(time: number, events: SimEvent[]): void {
     const ready = [...this.procs.values()].filter((p) => p.state === "ready" || p.state === "running");
     if (ready.length === 0) return;
@@ -407,6 +505,13 @@ export class ProcessSimulator {
     events.push({ time, layer: "Sched", type: "info", detail: `スケジューラ: ${ready.map((p) => `PID=${p.pid}(nice=${p.nice})`).join(", ")} を実行` });
   }
 
+  /**
+   * プロセスのメモリマップをイベントログに出力する
+   *
+   * @param proc - 対象プロセス
+   * @param time - 現在のシミュレーション時刻
+   * @param events - イベントログの追加先
+   */
   private logMemoryMap(proc: Process, time: number, events: SimEvent[]): void {
     for (const r of proc.memoryMap) {
       events.push({ time, layer: "Memory", type: "info", detail: `  ${r.startAddr}-${r.endAddr} ${r.permissions} ${r.name}${r.cow ? " [CoW]" : ""} (${r.size}KB)`, pid: proc.pid });

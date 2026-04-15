@@ -1,13 +1,35 @@
+/**
+ * app.ts — 正規表現エンジンシミュレーターのUIモジュール
+ *
+ * ブラウザ上で正規表現のNFAシミュレーションを可視化するアプリケーション。
+ * プリセットの実験パターンを選択し、各入力文字列に対するマッチング過程を
+ * ステップごとにトレース表示する。
+ *
+ * 主要コンポーネント:
+ *   - Example: 実験プリセットの定義
+ *   - EXAMPLES: 組み込みプリセット一覧
+ *   - RegexApp: UIの構築とイベント処理を担うメインクラス
+ */
+
 import { parse, buildNfa, simulateNfa, astToString } from "../engine/regex.js";
 import type { Nfa, MatchResult, MatchStep } from "../engine/regex.js";
 
+/**
+ * 実験プリセットを定義するインターフェース。
+ * セレクトボックスから選択可能な正規表現パターンとテスト入力のセットを表す。
+ */
 export interface Example {
+  /** プリセットの表示名 */
   name: string;
+  /** パターンの説明文 */
   description: string;
+  /** 正規表現パターン */
   pattern: string;
+  /** テスト対象の入力文字列一覧 */
   inputs: string[];
 }
 
+/** 組み込みの実験プリセット一覧。基本的なパターンから複雑な組み合わせまでカバーする。 */
 export const EXAMPLES: Example[] = [
   {
     name: "リテラルマッチ",
@@ -59,6 +81,12 @@ export const EXAMPLES: Example[] = [
   },
 ];
 
+/**
+ * シミュレーションステップのフェーズに応じた表示色を返す。
+ *
+ * @param phase - ステップのフェーズ種別
+ * @returns CSS色コード文字列
+ */
 function stepColor(phase: MatchStep["phase"]): string {
   switch (phase) {
     case "start":          return "#60a5fa";
@@ -69,7 +97,18 @@ function stepColor(phase: MatchStep["phase"]): string {
   }
 }
 
+/**
+ * 正規表現エンジンシミュレーターのメインUIクラス。
+ * 3ペインレイアウト（パターン/AST/NFA状態、マッチ結果一覧、ステップトレース）を構築し、
+ * プリセット選択とシミュレーション実行のイベント処理を行う。
+ */
 export class RegexApp {
+  /**
+   * アプリケーションを初期化し、UIをコンテナ要素に構築する。
+   * ヘッダー（タイトル、プリセット選択、実行ボタン）と3ペインのメインエリアを生成する。
+   *
+   * @param container - UIを挿入するHTMLコンテナ要素
+   */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 
@@ -146,6 +185,7 @@ export class RegexApp {
 
     // ── 描画 ──
 
+    /** パターン文字列とそのASTを左パネルに描画する */
     const renderPattern = (pattern: string) => {
       patDiv.innerHTML = "";
       const patEl = document.createElement("div");
@@ -160,6 +200,7 @@ export class RegexApp {
       patDiv.appendChild(astPre);
     };
 
+    /** NFA状態一覧を左パネルに描画する。開始状態・受理状態は色分けして表示。 */
     const renderNfa = (nfa: Nfa) => {
       nfaDiv.innerHTML = "";
       const info = document.createElement("div");
@@ -186,6 +227,7 @@ export class RegexApp {
       }
     };
 
+    /** マッチ結果一覧を中央パネルに描画する。各結果はクリックでトレース表示に遷移。 */
     const renderResults = (results: { input: string; result: MatchResult }[]) => {
       resDiv.innerHTML = "";
       for (const { input, result } of results) {
@@ -207,6 +249,7 @@ export class RegexApp {
       }
     };
 
+    /** NFAシミュレーションのステップトレースを右パネルに描画する。各ステップのフェーズ、アクティブ状態、詳細を表示。 */
     const renderTrace = (steps: MatchStep[], input: string) => {
       trDiv.innerHTML = "";
 
@@ -234,6 +277,7 @@ export class RegexApp {
 
     // ── ロジック ──
 
+    /** プリセットを読み込み、説明文とパターンを表示する（シミュレーションは実行しない） */
     const loadExample = (ex: Example) => {
       descSpan.textContent = ex.description;
       renderPattern(ex.pattern);
@@ -242,6 +286,7 @@ export class RegexApp {
       nfaDiv.innerHTML = "";
     };
 
+    /** プリセットのシミュレーションを実行し、全入力に対するマッチ結果を表示する */
     const runSim = (ex: Example) => {
       renderPattern(ex.pattern);
       const ast = parse(ex.pattern);

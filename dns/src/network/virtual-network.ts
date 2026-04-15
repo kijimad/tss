@@ -12,37 +12,52 @@
  */
 import type { UdpPacket, NetworkEvent } from "../protocol/types.js";
 
-// パケットを受信するハンドラ
+/** パケットを受信して応答を返すハンドラ型 */
 export type PacketHandler = (packet: UdpPacket) => UdpPacket | undefined;
 
+/**
+ * 仮想ネットワーク
+ *
+ * メモリ上でUDPパケットを配送するシミュレーション層。
+ * IPアドレスでサーバを識別し、送受信のトレースも記録できる。
+ */
 export class VirtualNetwork {
-  // IP → パケットハンドラ のマッピング
+  /** IP → パケットハンドラ のマッピング */
   private servers = new Map<string, PacketHandler>();
 
-  // トレース用イベントログ
+  /** トレース用イベントログ */
   private events: NetworkEvent[] = [];
+  /** トレース開始時刻 */
   private startTime = 0;
 
-  // 遅延シミュレーション（ms）
+  /** 遅延シミュレーション（ms） */
   latencyMs = 0;
 
-  // サーバを登録する
+  /**
+   * サーバを仮想ネットワークに登録する
+   * @param ip - サーバのIPアドレス
+   * @param handler - パケット受信時のハンドラ
+   */
   registerServer(ip: string, handler: PacketHandler): void {
     this.servers.set(ip, handler);
   }
 
-  // トレース開始
+  /** トレースを開始し、イベントログをリセットする */
   startTrace(): void {
     this.events = [];
     this.startTime = performance.now();
   }
 
-  // トレース取得
+  /** 記録されたネットワークイベントを取得する */
   getEvents(): NetworkEvent[] {
     return this.events;
   }
 
-  // パケットを送信し、応答を受け取る
+  /**
+   * パケットを送信し、応答を受け取る
+   * @param packet - 送信するUDPパケット
+   * @returns 応答パケット。宛先が存在しない場合はundefined
+   */
   async sendPacket(packet: UdpPacket): Promise<UdpPacket | undefined> {
     const handler = this.servers.get(packet.destination.ip);
     if (handler === undefined) {
@@ -59,7 +74,13 @@ export class VirtualNetwork {
     return response;
   }
 
-  // トレース付きパケット送信
+  /**
+   * トレースイベントを記録しながらパケットを送信する
+   * @param packet - 送信するUDPパケット
+   * @param questionName - 問い合わせ対象のドメイン名（トレース用）
+   * @param messageId - DNSメッセージID（トレース用）
+   * @returns 応答パケット。宛先が存在しない場合はundefined
+   */
   async sendPacketWithTrace(
     packet: UdpPacket,
     questionName: string,

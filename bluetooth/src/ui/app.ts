@@ -1,9 +1,59 @@
+/**
+ * app.ts — Bluetooth シミュレーター UI / プリセット定義
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * プリセット一覧 (7 実験)
+ * ═══════════════════════════════════════════════════════════════
+ *
+ * 各プリセットは実際の BLE デバイスのユースケースを再現する:
+ *
+ *   1. 心拍計 — GATT 基本フロー
+ *      接続 → サービス検出 → Heart Rate Measurement の通知購読。
+ *      BLE の最も標準的なフロー。
+ *
+ *   2. 環境センサー — 温湿度読み取り
+ *      Environmental Sensing Service から Temperature/Humidity を取得。
+ *      2M PHY で高速通信。
+ *
+ *   3. スマートロック — Passkey ペアリング + 書き込み
+ *      セキュアペアリング後にカスタムサービスへ Write でコマンド送信。
+ *      IoT セキュリティの実例。
+ *
+ *   4. BT スピーカー — Numeric Comparison ペアリング
+ *      両デバイスで 6 桁を確認する最も推奨されるペアリング方式。
+ *
+ *   5. Just Works ペアリング — MITM 保護なし
+ *      IO 能力のないデバイス同士。手軽だがセキュリティは低い。
+ *
+ *   6. BLE 5 2M PHY — 高速通信
+ *      PHY Update で 2Mbps に切り替え。フィットネスウォッチの例。
+ *
+ *   7. Coded PHY — 長距離通信
+ *      FEC (前方誤り訂正) 付きで到達距離を ×4 に拡大。遠距離センサー。
+ *
+ * ═══════════════════════════════════════════════════════════════
+ * UI 構成
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *   ┌─ ヘッダ ─────────────────────────────────────────┐
+ *   │  [プリセット選択 ▼]  [▶ Run]  説明テキスト        │
+ *   ├─ 左パネル ─────────┬─ 右パネル ──────────────────┤
+ *   │  Devices           │                             │
+ *   │  Connection        │  Protocol Trace             │
+ *   │  GATT Services     │  (時刻/方向/層/詳細の       │
+ *   │  Values &          │   プロトコルトレース)         │
+ *   │   Notifications    │                             │
+ *   └───────────────────┴─────────────────────────────┘
+ */
+
 import {
   BluetoothSimulator, createDevice, svc, char, uuidName,
 } from "../engine/bluetooth.js";
 import type { SimConfig, SimResult, SimEvent, GattService, BleDevice } from "../engine/bluetooth.js";
 
-// ── プリセット実験 ──
+// ══════════════════════════════════════════════════════════════
+// プリセット実験
+// ══════════════════════════════════════════════════════════════
 
 export interface Experiment {
   name: string;
@@ -12,7 +62,11 @@ export interface Experiment {
 }
 
 // ── デバイスとプロファイル ──
+// 各デバイスは実在する BLE デバイスカテゴリを模倣している
 
+// 心拍計バンド: Heart Rate Service (0x180D) が中核。
+// Heart Rate Measurement (0x2A37) は notify 専用 — 接続後に CCCD を有効化して受信する。
+// 値のフォーマット: [Flags(1B)][Heart Rate(1-2B)][Energy Expended(opt)][RR-Interval(opt)]
 const heartRatePeripheral = createDevice("HR-Band", "AA:BB:CC:01:02:03", [
   svc("180d", "Heart Rate", [
     char("2a37", "Heart Rate Measurement", ["notify"], "10 48", "72 bpm (sensor: chest)", ),
@@ -28,6 +82,9 @@ const heartRatePeripheral = createDevice("HR-Band", "AA:BB:CC:01:02:03", [
   ]),
 ], { ioCap: "no-io", distance: 0.5 });
 
+// 環境センサー: Environmental Sensing Service (0x181A)
+// Temperature (0x2A6E): sint16 (0.01℃単位), Humidity (0x2A6F): uint16 (0.01%単位)
+// 例: 0xC800 = 200 → 2.00°C... ではなく 20.0°C (表現はシミュレーション上の表示値)
 const envSensor = createDevice("EnvSensor-01", "DD:EE:FF:11:22:33", [
   svc("181a", "Environmental Sensing", [
     char("2a6e", "Temperature", ["read", "notify"], "c800", "20.0°C"),
@@ -41,6 +98,9 @@ const envSensor = createDevice("EnvSensor-01", "DD:EE:FF:11:22:33", [
   ]),
 ], { ioCap: "no-io", distance: 3, version: "5.2" });
 
+// スマートロック: ベンダー独自サービス (0xFEE0) でロック制御。
+// ioCap="keyboard-display" → Passkey ペアリングが可能 (MITM 保護あり)。
+// セキュリティが重要な IoT デバイスでは必ずペアリングを行うべき。
 const smartLock = createDevice("SmartLock-X1", "11:22:33:AA:BB:CC", [
   svc("1800", "Generic Access", [
     char("2a00", "Device Name", ["read"], "536d6172744c6f636b2d5831", "SmartLock-X1"),
@@ -54,6 +114,8 @@ const smartLock = createDevice("SmartLock-X1", "11:22:33:AA:BB:CC", [
   ]),
 ], { ioCap: "keyboard-display", distance: 1, mtu: 185 });
 
+// BT スピーカー: ioCap="display-yesno" → Numeric Comparison が利用可能。
+// BLE 5.3 + Coded PHY 対応。Generic Access (0x1800) で Appearance を公開。
 const speaker = createDevice("BT-Speaker", "55:66:77:88:99:AA", [
   svc("1800", "Generic Access", [
     char("2a00", "Device Name", ["read"], "42542d537065616b6572", "BT-Speaker"),
@@ -65,6 +127,8 @@ const speaker = createDevice("BT-Speaker", "55:66:77:88:99:AA", [
   ]),
 ], { ioCap: "display-yesno", distance: 2, version: "5.3", supportedPhy: ["1M", "2M", "Coded-S2"] });
 
+// フィットネスウォッチ: Heart Rate + CSC (Cycling Speed and Cadence) の複合デバイス。
+// MTU=512 で大量データ転送に対応。2M PHY で高速通信。
 const fitnessWatch = createDevice("FitWatch-Pro", "CC:DD:EE:FF:00:11", [
   svc("180d", "Heart Rate", [
     char("2a37", "Heart Rate Measurement", ["notify"], "10 55", "85 bpm"),
@@ -78,9 +142,11 @@ const fitnessWatch = createDevice("FitWatch-Pro", "CC:DD:EE:FF:00:11", [
   ]),
 ], { ioCap: "display-yesno", distance: 0.3, version: "5.2", mtu: 512, supportedPhy: ["1M", "2M"] });
 
-const centralPhone = createDevice("My-Phone", "00:11:22:33:44:55", [], { ioCap: "keyboard-display", mtu: 517, supportedPhy: ["1M", "2M", "Coded-S2"] });
-const centralPc = createDevice("My-PC", "AA:00:BB:11:CC:22", [], { ioCap: "display-yesno", mtu: 247 });
-const centralNoIo = createDevice("Hub-01", "FF:EE:DD:CC:BB:AA", [], { ioCap: "no-io", mtu: 247 });
+// セントラルデバイス群
+// GAP ロールではセントラル = スキャンして接続を開始する側
+const centralPhone = createDevice("My-Phone", "00:11:22:33:44:55", [], { ioCap: "keyboard-display", mtu: 517, supportedPhy: ["1M", "2M", "Coded-S2"] }); // スマートフォン: 全 PHY 対応、高 MTU
+const centralPc = createDevice("My-PC", "AA:00:BB:11:CC:22", [], { ioCap: "display-yesno", mtu: 247 }); // PC: 標準 MTU
+const centralNoIo = createDevice("Hub-01", "FF:EE:DD:CC:BB:AA", [], { ioCap: "no-io", mtu: 247 }); // IoT ハブ: IO なし → Just Works のみ
 
 export const EXPERIMENTS: Experiment[] = [
   {
@@ -200,8 +266,13 @@ export const EXPERIMENTS: Experiment[] = [
   },
 ];
 
-// ── 色定義 ──
+// ══════════════════════════════════════════════════════════════
+// 色定義
+// ══════════════════════════════════════════════════════════════
+// プロトコルスタックの各層とイベント種別に色を割り当て、
+// トレース表示でどの層の動作かを視覚的に識別できるようにする。
 
+/** プロトコル層ごとの表示色 */
 function layerColor(layer: SimEvent["layer"]): string {
   switch (layer) {
     case "Radio":   return "#64748b";
@@ -215,6 +286,7 @@ function layerColor(layer: SimEvent["layer"]): string {
   }
 }
 
+/** イベント種別ごとの表示色 */
 function typeColor(type: SimEvent["type"]): string {
   switch (type) {
     case "adv":           return "#f59e0b";
@@ -231,9 +303,19 @@ function typeColor(type: SimEvent["type"]): string {
   }
 }
 
-// ── UI ──
+// ══════════════════════════════════════════════════════════════
+// UI
+// ══════════════════════════════════════════════════════════════
+//
+// 左パネル: デバイス情報、接続パラメータ、GATT ツリー、読取値/通知
+// 右パネル: プロトコルトレース (時刻 → 方向 → 層 → 詳細)
+//
+// 操作フロー:
+//   1. プリセット選択 → 左パネルにデバイス情報を表示
+//   2. ▶ Run クリック → シミュレーション実行 → 全パネル更新
 
 export class BluetoothApp {
+  /** アプリケーションを初期化し、指定コンテナに UI を構築する */
   init(container: HTMLElement): void {
     container.style.cssText = "display:flex;flex-direction:column;height:100vh;font-family:'Fira Code','Cascadia Code',monospace;background:#0f172a;color:#e2e8f0;";
 

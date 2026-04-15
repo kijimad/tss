@@ -1,0 +1,8 @@
+{
+  "name": "mem-swap-sim",
+  "version": "1.0.0",
+  "description": "Memory swapping simulator — ページング、スワッピング、ページフォルト、置換アルゴリズム",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build", "test": "vitest run", "test:watch": "vitest" },
+  "devDependencies": { "typescript": "^6.0.2", "vite": "^8.0.2", "vitest": "^4.1.1" }
+}

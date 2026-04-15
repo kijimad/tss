@@ -1,10 +1,27 @@
+/**
+ * linker.test.ts — リンカーシミュレータのテストスイート
+ *
+ * 以下のモジュールをテストする:
+ * - ObjectFileBuilder: オブジェクトファイル (.o) の構築
+ * - buildSharedLibrary: 共有ライブラリ (.so) の構築
+ * - staticLink: 静的リンカーのシンボル解決・リロケーション・セクション結合
+ * - dynamicLink: 動的リンカーの GOT/PLT 構築・遅延バインディング
+ * - PRESETS: 全プリセットの正当性と実行可能性
+ */
+
 import { describe, it, expect } from "vitest";
 import { ObjectFileBuilder, buildSharedLibrary } from "../linker/object-file.js";
 import { staticLink } from "../linker/static-linker.js";
 import { dynamicLink } from "../linker/dynamic-linker.js";
 import { PRESETS } from "../linker/presets.js";
 
+// ============================================================================
+// ObjectFileBuilder のテスト
+// コンパイラが生成するオブジェクトファイルのビルダーが正しく動作するかを検証する
+// ============================================================================
+
 describe("ObjectFileBuilder", () => {
+  // 基本的な関数定義を含むオブジェクトファイルが正しく生成されるか
   it("関数とシンボルを持つオブジェクトファイルを生成できる", () => {
     const obj = new ObjectFileBuilder("test.o")
       .addFunction("main", ["push rbp", "ret"])
@@ -18,6 +35,7 @@ describe("ObjectFileBuilder", () => {
     expect(obj.sections.some((s) => s.name === ".text")).toBe(true);
   });
 
+  // .data セクションに変数を追加し、正しいシンボル情報が生成されるか
   it("グローバル変数を追加できる", () => {
     const obj = new ObjectFileBuilder("data.o")
       .addVariable("count", "42")
@@ -29,6 +47,7 @@ describe("ObjectFileBuilder", () => {
     expect(obj.sections.some((s) => s.name === ".data")).toBe(true);
   });
 
+  // 外部シンボルへのリロケーション（未解決参照）が正しく記録されるか
   it("リロケーションを追加できる", () => {
     const obj = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call foo"])
@@ -39,6 +58,7 @@ describe("ObjectFileBuilder", () => {
     expect(obj.relocations[0]!.symbol).toBe("foo");
   });
 
+  // static 修飾に相当するローカルバインディングのシンボルが正しく設定されるか
   it("ローカルシンボルを追加できる", () => {
     const obj = new ObjectFileBuilder("test.o")
       .addFunction("helper", ["ret"], "local")
@@ -48,7 +68,13 @@ describe("ObjectFileBuilder", () => {
   });
 });
 
+// ============================================================================
+// buildSharedLibrary のテスト
+// 動的リンクで使用する共有ライブラリ (.so) が正しく構築されるかを検証する
+// ============================================================================
+
 describe("buildSharedLibrary", () => {
+  // 複数のエクスポート関数を持つ .so が正しく生成されるか
   it("共有ライブラリを生成できる", () => {
     const lib = buildSharedLibrary("libtest.so", [
       { name: "func1", body: ["ret"] },
@@ -61,6 +87,7 @@ describe("buildSharedLibrary", () => {
     expect(lib.exportedSymbols[1]!.name).toBe("func2");
   });
 
+  // エクスポート変数（.data セクション）を含む .so が正しく生成されるか
   it("変数付き共有ライブラリを生成できる", () => {
     const lib = buildSharedLibrary(
       "libdata.so",
@@ -73,7 +100,18 @@ describe("buildSharedLibrary", () => {
   });
 });
 
+// ============================================================================
+// staticLink のテスト
+// 静的リンカーの主要機能を検証する:
+// - シンボル解決（name resolution）
+// - リロケーション適用
+// - 多重定義・未定義参照のエラー検出
+// - セクション結合
+// ============================================================================
+
 describe("staticLink", () => {
+  // 正常系: main.o → add (math.o) の外部参照が正しく解決され、
+  // セクションが結合された実行可能バイナリが生成されるか
   it("2つのオブジェクトファイルを正常にリンクできる", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call add", "ret"])
@@ -94,6 +132,8 @@ describe("staticLink", () => {
     expect(result.steps.length).toBeGreaterThanOrEqual(4);
   });
 
+  // エラー系: 同名グローバルシンボル "helper" が a.o と b.o の両方にある場合、
+  // リンカーが多重定義エラーを報告するか
   it("多重定義エラーを検出できる", () => {
     const a = new ObjectFileBuilder("a.o")
       .addFunction("helper", ["ret"])
@@ -109,6 +149,8 @@ describe("staticLink", () => {
     expect(result.errors.some((e) => e.includes("多重定義"))).toBe(true);
   });
 
+  // エラー系: 存在しないシンボル "missing" を参照している場合、
+  // リンカーが未定義参照エラーを報告するか
   it("未定義シンボルエラーを検出できる", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call missing", "ret"])
@@ -121,6 +163,8 @@ describe("staticLink", () => {
     expect(result.errors.some((e) => e.includes("未定義参照"))).toBe(true);
   });
 
+  // ローカル（static）シンボルはファイル外から参照不可であり、
+  // グローバルシンボルテーブルに含まれないことを確認
   it("ローカルシンボルはグローバルテーブルに追加されない", () => {
     const obj = new ObjectFileBuilder("test.o")
       .addFunction("public_fn", ["ret"])
@@ -134,6 +178,7 @@ describe("staticLink", () => {
     expect(result.symbolTable.has("private_fn")).toBe(false);
   });
 
+  // .data セクション（グローバル変数）が .text と同様に正しく結合されるか
   it("データセクションも結合される", () => {
     const a = new ObjectFileBuilder("a.o")
       .addVariable("x", "10")
@@ -152,7 +197,19 @@ describe("staticLink", () => {
   });
 });
 
+// ============================================================================
+// dynamicLink のテスト
+// 動的リンカーの主要機能を検証する:
+// - GOT (Global Offset Table) の構築
+// - PLT (Procedure Linkage Table) の構築
+// - 外部シンボルの解決
+// - 複数ライブラリからのリンク
+// - 未定義シンボルのエラー検出
+// ============================================================================
+
 describe("dynamicLink", () => {
+  // 正常系: libfoo.so の foo 関数に対して GOT/PLT エントリが作成され、
+  // neededLibraries に libfoo.so が含まれるか
   it("共有ライブラリのシンボルを GOT/PLT で参照できる", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call foo@PLT", "ret"])
@@ -171,6 +228,8 @@ describe("dynamicLink", () => {
     expect(result.neededLibraries).toContain("libfoo.so");
   });
 
+  // 複数の .so から異なるシンボルを参照する場合、
+  // それぞれに GOT エントリが作成され、全ライブラリが依存リストに含まれるか
   it("複数ライブラリからのリンクに対応できる", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call a", "call b", "ret"])
@@ -192,6 +251,7 @@ describe("dynamicLink", () => {
     expect(result.neededLibraries).toEqual(["liba.so", "libb.so"]);
   });
 
+  // エラー系: 参照先シンボルがどの .so にも見つからない場合のエラー検出
   it("未定義の外部シンボルでエラーになる", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call missing", "ret"])
@@ -208,6 +268,8 @@ describe("dynamicLink", () => {
     expect(result.errors.some((e) => e.includes("未定義参照"))).toBe(true);
   });
 
+  // オブジェクトファイル内で定義済みのグローバルシンボルは
+  // 外部参照とみなされず、GOT エントリが作成されないことを確認
   it("ローカルシンボルは外部参照とみなされない", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call local_fn", "ret"])
@@ -221,6 +283,8 @@ describe("dynamicLink", () => {
     expect(result.got.size).toBe(0);
   });
 
+  // GOT エントリに共有ライブラリ上のシンボルの実アドレスが
+  // 正しく設定されるか（遅延バインディング解決後の状態）
   it("GOT エントリに解決済みアドレスが設定される", () => {
     const main = new ObjectFileBuilder("main.o")
       .addFunction("main", ["call func", "ret"])
@@ -241,7 +305,13 @@ describe("dynamicLink", () => {
   });
 });
 
+// ============================================================================
+// PRESETS のテスト
+// 全プリセットが正しく定義され、リンク処理が例外なく実行できることを検証する
+// ============================================================================
+
 describe("PRESETS", () => {
+  // 全プリセットが必須フィールドを持ち、有効なモード値を持つか
   it("全プリセットが正しく定義されている", () => {
     expect(PRESETS.length).toBeGreaterThanOrEqual(6);
     for (const preset of PRESETS) {
@@ -252,6 +322,9 @@ describe("PRESETS", () => {
     }
   });
 
+  // 全プリセットについてリンク処理を実行し、例外が発生しないことを確認する。
+  // エラー系プリセット（多重定義、未定義参照）も含め、success が true/false いずれでも
+  // 処理ステップが生成されることを検証する。
   it("各プリセットのリンクが実行できる（エラー系含む）", () => {
     for (const preset of PRESETS) {
       if (preset.mode === "static" || preset.mode === "both") {

@@ -10,7 +10,15 @@
  */
 import { type DnsMessage, type DnsHeader, type DnsQuestion, type DnsRecord, type ResponseCode, type RecordType } from "./types.js";
 
-// ArrayBuffer から DNS メッセージをデコードする
+/**
+ * ArrayBuffer から DNS メッセージをデコードする
+ *
+ * バイナリデータを先頭から順にパースし、ヘッダ・Question・Answer・
+ * Authority・Additional の各セクションを復元する。
+ *
+ * @param buf - DNSメッセージのバイナリ表現
+ * @returns デコードされたDNSメッセージ
+ */
 export function decodeDnsMessage(buf: ArrayBuffer): DnsMessage {
   const view = new DataView(buf);
   let offset = 0;
@@ -70,7 +78,13 @@ export function decodeDnsMessage(buf: ArrayBuffer): DnsMessage {
   return { header, questions, answers, authorities, additionals };
 }
 
-// Resource Record をデコード
+/**
+ * Resource Record を1件デコードする
+ * @param fullData - メッセージ全体のバイト配列（ポインタ解決に使用）
+ * @param view - DataView（数値読み取り用）
+ * @param offset - 読み取り開始位置
+ * @returns デコードされたレコードと次の読み取り位置
+ */
 function decodeRecord(
   fullData: Uint8Array,
   view: DataView,
@@ -90,7 +104,19 @@ function decodeRecord(
   return { record: { name, type, class: cls, ttl, data }, newOffset: offset };
 }
 
-// RDATA をレコード型に応じてデコード
+/**
+ * RDATA をレコード型に応じてデコードする
+ *
+ * Aレコードは4バイトのIPv4アドレス、NS/CNAMEはドメイン名、
+ * MXは優先度+ドメイン名、その他はUTF-8テキストとして扱う。
+ *
+ * @param fullData - メッセージ全体のバイト配列
+ * @param view - DataView
+ * @param offset - RDATA の開始位置
+ * @param type - レコード型
+ * @param rdlength - RDATA の長さ（バイト）
+ * @returns デコードされたデータの文字列表現
+ */
 function decodeRdata(
   fullData: Uint8Array,
   view: DataView,

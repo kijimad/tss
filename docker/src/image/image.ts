@@ -12,7 +12,10 @@
  * 上位レイヤーが下位を上書きする（Copy-on-Write）。
  */
 
-// ファイルシステムレイヤー
+/**
+ * ファイルシステムレイヤーを表すインターフェース。
+ * Docker イメージは複数のレイヤーで構成され、各レイヤーはファイルの追加・削除を記録する。
+ */
 export interface FsLayer {
   id: string;
   files: Map<string, string>;   // path → content
@@ -21,7 +24,10 @@ export interface FsLayer {
   size: number;                  // バイト数
 }
 
-// Docker イメージ
+/**
+ * Docker イメージを表すインターフェース。
+ * レイヤーの積み重ね、環境変数、デフォルト実行コマンドなどのメタデータを保持する。
+ */
 export interface DockerImage {
   name: string;
   tag: string;
@@ -33,7 +39,10 @@ export interface DockerImage {
   entrypoint: string[];
 }
 
-// Dockerfile の命令
+/**
+ * Dockerfile の各命令を表すユニオン型。
+ * FROM, RUN, COPY, WORKDIR, ENV, EXPOSE, CMD, ENTRYPOINT をサポートする。
+ */
 export type DockerInstruction =
   | { type: "FROM"; image: string; tag: string }
   | { type: "RUN"; command: string }
@@ -44,9 +53,15 @@ export type DockerInstruction =
   | { type: "CMD"; args: string[] }
   | { type: "ENTRYPOINT"; args: string[] };
 
+/** レイヤーID生成用のカウンター */
 let nextLayerId = 1;
 
-// Dockerfile をパースする
+/**
+ * Dockerfile の内容をパースし、命令の配列に変換する。
+ * 空行やコメント行（#で始まる）はスキップされる。
+ * @param content - Dockerfile のテキスト内容
+ * @returns パースされた Dockerfile 命令の配列
+ */
 export function parseDockerfile(content: string): DockerInstruction[] {
   const instructions: DockerInstruction[] = [];
   const lines = content.split("\n");
@@ -92,7 +107,13 @@ export function parseDockerfile(content: string): DockerInstruction[] {
   return instructions;
 }
 
-// ベースイメージのプリセット
+/**
+ * 指定された名前とタグに基づいてベースイメージを生成する。
+ * ubuntu, alpine, node, python, nginx のプリセットをサポートする。
+ * @param name - ベースイメージ名（例: "ubuntu", "node"）
+ * @param tag - イメージタグ（例: "22.04", "latest"）
+ * @returns 初期レイヤーとメタデータを含む DockerImage オブジェクト
+ */
 export function getBaseImage(name: string, tag: string): DockerImage {
   const baseLayers: Record<string, Map<string, string>> = {
     "ubuntu": new Map([
@@ -140,7 +161,16 @@ export function getBaseImage(name: string, tag: string): DockerImage {
   };
 }
 
-// イメージをビルドする
+/**
+ * Dockerfile の命令リストからイメージをビルドする。
+ * 各命令を順番に処理し、レイヤーを積み重ねてイメージを構築する。
+ * RUN コマンドはパッケージインストールやファイル作成をシミュレートする。
+ * @param dockerfile - パース済みの Dockerfile 命令配列
+ * @param buildContext - COPY 命令のソースファイル（パス→内容のマップ）
+ * @param imageName - ビルドするイメージの名前
+ * @param imageTag - ビルドするイメージのタグ
+ * @returns ビルドされたイメージとビルドイベントの配列
+ */
 export function buildImage(
   dockerfile: DockerInstruction[],
   buildContext: Map<string, string>,  // COPY のソースファイル
@@ -244,7 +274,13 @@ export function buildImage(
   return { image: image ?? getBaseImage("scratch", "latest"), events };
 }
 
-// UnionFS: 全レイヤーを重ねて1つのFSに見せる
+/**
+ * UnionFS の解決: 全レイヤーを重ねて統合されたファイルシステムを返す。
+ * 上位レイヤーのファイルが下位レイヤーを上書きし、
+ * 削除マーク（whiteout）されたファイルは結果から除外される。
+ * @param layers - 下位から上位へ順序付けられたレイヤー配列
+ * @returns 統合されたファイルシステム（パス→内容のマップ）
+ */
 export function resolveUnionFs(layers: FsLayer[]): Map<string, string> {
   const result = new Map<string, string>();
   for (const layer of layers) {
@@ -254,6 +290,10 @@ export function resolveUnionFs(layers: FsLayer[]): Map<string, string> {
   return result;
 }
 
+/**
+ * ビルドプロセス中に発生するイベントを表すインターフェース。
+ * ステップの進捗やビルド完了を通知するために使用される。
+ */
 export interface BuildEvent {
   type: "step" | "complete";
   step: string;

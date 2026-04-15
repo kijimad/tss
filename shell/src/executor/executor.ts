@@ -15,7 +15,7 @@
  */
 import { parse, type ListNode, type PipelineNode, type SimpleCommand } from "../parser/parser.js";
 
-// プロセス
+/** プロセス情報。シミュレートされたプロセスの状態と出力を保持する */
 export interface Process {
   pid: number;
   command: string;
@@ -25,7 +25,7 @@ export interface Process {
   stderr: string;
 }
 
-// ジョブ
+/** ジョブ情報。バックグラウンド実行を含むプロセスグループを管理する */
 export interface Job {
   id: number;
   processes: Process[];
@@ -34,7 +34,7 @@ export interface Job {
   state: "running" | "stopped" | "done";
 }
 
-// シェルイベント
+/** シェルイベント型。実行トレース表示用に各種操作を通知するための共用体型 */
 export type ShellEvent =
   | { type: "parse"; ast: string }
   | { type: "expand"; original: string; expanded: string }
@@ -49,6 +49,11 @@ export type ShellEvent =
   | { type: "stdout"; text: string }
   | { type: "stderr"; text: string };
 
+/**
+ * シェル実行エンジンクラス
+ * 仮想ファイルシステム・環境変数・ジョブ管理を内蔵し、
+ * パースされたASTを解釈実行する。fork/execの代わりに関数呼び出しでシミュレートする。
+ */
 export class ShellExecutor {
   // 環境変数
   env: Record<string, string> = {
@@ -83,9 +88,14 @@ export class ShellExecutor {
   events: ShellEvent[] = [];
   onEvent: ((event: ShellEvent) => void) | undefined;
 
+  /** イベントを記録し、登録されたリスナーに通知する */
   private emit(event: ShellEvent): void { this.events.push(event); this.onEvent?.(event); }
 
-  // コマンドを実行
+  /**
+   * コマンド文字列を受け取り、エイリアス展開・パース・実行を行う
+   * @param input - ユーザーが入力したコマンド文字列
+   * @returns 標準出力に書き込まれた文字列
+   */
   execute(input: string): string {
     this.stdout = ""; this.stderr = ""; this.events = [];
     if (input.trim().length === 0) return "";
@@ -103,6 +113,7 @@ export class ShellExecutor {
     return this.stdout;
   }
 
+  /** リストノードを実行する。&&/||の条件分岐と;の順次実行を処理する */
   private executeList(list: ListNode): void {
     let lastExitCode = 0;
     for (const item of list.pipelines) {
@@ -116,6 +127,7 @@ export class ShellExecutor {
     }
   }
 
+  /** パイプラインを実行する。各コマンドのstdoutを次のコマンドのstdinに接続する */
   private executePipeline(pipeline: PipelineNode): number {
     if (pipeline.commands.length === 1) {
       const cmd = pipeline.commands[0];
@@ -154,6 +166,7 @@ export class ShellExecutor {
     return lastExitCode;
   }
 
+  /** 単純コマンドを実行する。変数展開・リダイレクト処理・バックグラウンド実行を含む */
   private executeSimple(cmd: SimpleCommand, stdin: string | undefined): number {
     const args = cmd.args.map(a => this.expandVariables(a));
     if (args.length === 0) return 0;
@@ -263,6 +276,7 @@ export class ShellExecutor {
 
   // === 組み込みコマンド ===
 
+  /** echoコマンド。-eでエスケープ解釈、-nで改行なし出力 */
   private cmdEcho(args: string[]): string {
     let interpret = false; let noNewline = false;
     const filtered = args.filter(a => { if (a === "-e") { interpret = true; return false; } if (a === "-n") { noNewline = true; return false; } return true; });
@@ -271,6 +285,7 @@ export class ShellExecutor {
     return text + (noNewline ? "" : "\n");
   }
 
+  /** catコマンド。ファイルの内容を連結して出力する。引数なしの場合はstdinを返す */
   private cmdCat(args: string[], stdin: string | undefined): string {
     if (args.length === 0 && stdin !== undefined) return stdin;
     let output = "";
@@ -283,6 +298,7 @@ export class ShellExecutor {
     return output;
   }
 
+  /** lsコマンド。仮想ファイルシステム上のディレクトリ内容を一覧表示する */
   private cmdLs(args: string[]): string {
     const long = args.includes("-l") || args.includes("-la");
     const showHidden = args.includes("-a") || args.includes("-la");
@@ -311,6 +327,7 @@ export class ShellExecutor {
     return entries.join("  ") + (entries.length > 0 ? "\n" : "");
   }
 
+  /** cdコマンド。カレントディレクトリを変更する。引数なしでHOMEに移動 */
   private cmdCd(args: string[]): string {
     const target = args[0] ?? this.env["HOME"] ?? "/";
     const resolved = target === "-" ? (this.env["OLDPWD"] ?? "/") : this.resolvePath(target);
@@ -319,6 +336,7 @@ export class ShellExecutor {
     return "";
   }
 
+  /** grepコマンド。正規表現でテキストを検索する。-i, -v, -c, -nオプション対応 */
   private cmdGrep(args: string[], stdin: string | undefined): string {
     const pattern = args.find(a => !a.startsWith("-")) ?? "";
     const ignoreCase = args.includes("-i");
@@ -334,6 +352,7 @@ export class ShellExecutor {
     return matched.map(l => (lineNum ? `${String(l.num)}:` : "") + l.line).join("\n") + "\n";
   }
 
+  /** wcコマンド。行数・単語数・文字数をカウントする */
   private cmdWc(args: string[], stdin: string | undefined): string {
     const fileArg = args.find(a => !a.startsWith("-"));
     const input = fileArg !== undefined ? (this.fs.get(this.resolvePath(fileArg)) ?? "") : (stdin ?? "");
@@ -346,12 +365,14 @@ export class ShellExecutor {
     return `  ${String(lines)}  ${String(words)}  ${String(chars)}\n`;
   }
 
+  /** headコマンド。入力の先頭n行を出力する（デフォルト10行） */
   private cmdHead(args: string[], stdin: string | undefined): string {
     const n = Number(args.find(a => a.startsWith("-"))?.slice(1) ?? "10");
     const input = stdin ?? "";
     return input.split("\n").slice(0, n).join("\n") + "\n";
   }
 
+  /** tailコマンド。入力の末尾n行を出力する（デフォルト10行） */
   private cmdTail(args: string[], stdin: string | undefined): string {
     const n = Number(args.find(a => a.startsWith("-"))?.slice(1) ?? "10");
     const input = stdin ?? "";
@@ -359,11 +380,13 @@ export class ShellExecutor {
     return lines.slice(-n).join("\n") + "\n";
   }
 
+  /** sortコマンド。入力行をアルファベット順にソートする */
   private cmdSort(stdin: string | undefined): string {
     if (stdin === undefined) return "";
     return stdin.split("\n").filter(l => l.length > 0).sort().join("\n") + "\n";
   }
 
+  /** uniqコマンド。連続する重複行を除去する */
   private cmdUniq(stdin: string | undefined): string {
     if (stdin === undefined) return "";
     const lines = stdin.split("\n"); let prev = ""; const result: string[] = [];
@@ -371,6 +394,7 @@ export class ShellExecutor {
     return result.join("\n") + "\n";
   }
 
+  /** trコマンド。文字の置換を行う */
   private cmdTr(args: string[], stdin: string | undefined): string {
     if (stdin === undefined || args.length < 2) return stdin ?? "";
     const from = args[0] ?? ""; const to = args[1] ?? "";
@@ -382,6 +406,7 @@ export class ShellExecutor {
     return result;
   }
 
+  /** cutコマンド。デリミタで区切られたフィールドを抽出する */
   private cmdCut(args: string[], stdin: string | undefined): string {
     if (stdin === undefined) return "";
     const dIdx = args.indexOf("-d"); const delim = dIdx >= 0 ? (args[dIdx + 1] ?? ",") : "\t";
@@ -389,12 +414,14 @@ export class ShellExecutor {
     return stdin.split("\n").map(line => line.split(delim)[field] ?? "").join("\n") + "\n";
   }
 
+  /** teeコマンド。入力をファイルに書き込みつつ、そのまま出力する */
   private cmdTee(args: string[], stdin: string | undefined): string {
     const file = args[0]; const input = stdin ?? "";
     if (file !== undefined) this.fs.set(this.resolvePath(file), input);
     return input;
   }
 
+  /** seqコマンド。連続する整数列を生成する */
   private cmdSeq(args: string[]): string {
     const start = args.length >= 2 ? Number(args[0]) : 1;
     const end = Number(args[args.length - 1] ?? "1");
@@ -403,6 +430,7 @@ export class ShellExecutor {
     return result.join("\n") + "\n";
   }
 
+  /** sourceコマンド。ファイル内の各行をシェルコマンドとして実行する */
   private cmdSource(args: string[]): string {
     const file = args[0]; if (file === undefined) return "";
     const content = this.fs.get(this.resolvePath(file));
@@ -415,6 +443,7 @@ export class ShellExecutor {
     return output;
   }
 
+  /** testコマンド。条件式を評価する（-f: ファイル存在, -d: ディレクトリ存在, -z/-n: 文字列長, =: 比較） */
   private cmdTest(args: string[]): boolean {
     if (args.includes("-f")) return this.fs.has(this.resolvePath(args[args.indexOf("-f") + 1] ?? ""));
     if (args.includes("-d")) return [...this.fs.keys()].some(k => k.startsWith(this.resolvePath(args[args.indexOf("-d") + 1] ?? "") + "/"));
@@ -424,6 +453,7 @@ export class ShellExecutor {
     return false;
   }
 
+  /** printfコマンド。フォーマット文字列に従って出力する（%s, %d対応） */
   private cmdPrintf(args: string[]): string {
     const fmt = args[0] ?? ""; const rest = args.slice(1);
     let result = fmt; let i = 0;
@@ -433,6 +463,7 @@ export class ShellExecutor {
     return result;
   }
 
+  /** helpコマンド。利用可能なコマンドと機能の一覧を表示する */
   private cmdHelp(): string {
     return [
       "Shell builtins: echo, cat, ls, cd, pwd, mkdir, touch, rm, cp, mv",
@@ -449,12 +480,14 @@ export class ShellExecutor {
 
   // === ヘルパー ===
 
+  /** 変数展開。${VAR}、$VAR、~をそれぞれ対応する値に置換する */
   private expandVariables(s: string): string {
     return s.replace(/\$\{(\w+)\}/g, (_, name) => this.env[name] ?? "")
             .replace(/\$(\w+)/g, (_, name) => this.env[name] ?? "")
             .replace(/~/, this.env["HOME"] ?? "/home/user");
   }
 
+  /** エイリアス展開。コマンド名が登録済みエイリアスに一致すれば置換する */
   private expandAliases(input: string): string {
     const parts = input.trim().split(/\s+/);
     const cmd = parts[0] ?? "";
@@ -463,6 +496,7 @@ export class ShellExecutor {
     return input;
   }
 
+  /** グロブ展開。*や?を含むパターンを仮想ファイルシステム上のファイル名に展開する */
   private expandGlob(pattern: string): string[] {
     if (!pattern.includes("*") && !pattern.includes("?")) return [pattern];
     const dir = this.env["PWD"] ?? "/";
@@ -478,6 +512,7 @@ export class ShellExecutor {
     return matches.length > 0 ? matches.sort() : [pattern];
   }
 
+  /** パス解決。相対パスをPWD基準の絶対パスに変換し、..や.を正規化する */
   private resolvePath(p: string): string {
     if (p.startsWith("/")) return p;
     if (p.startsWith("~")) return (this.env["HOME"] ?? "/home/user") + p.slice(1);
@@ -489,15 +524,18 @@ export class ShellExecutor {
     return "/" + resolved.join("/");
   }
 
+  /** 標準出力に文字列を書き込み、stdoutイベントを発行する */
   private writeStdout(text: string): void {
     this.stdout += text;
     this.emit({ type: "stdout", text });
   }
 
+  /** 標準エラー出力に文字列を書き込み、stderrイベントを発行する */
   private writeStderr(text: string): void {
     this.stderr += text;
     this.emit({ type: "stderr", text });
   }
 
+  /** イベントログをクリアする */
   resetEvents(): void { this.events = []; }
 }

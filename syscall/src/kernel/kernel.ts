@@ -1,77 +1,216 @@
 /**
  * kernel.ts — システムコールシミュレーションカーネル
  *
- * ユーザモード → トラップ (INT 0x80 / syscall) → カーネルモード → リターン
- * の遷移をシミュレートし、fd テーブル・プロセステーブル・メモリマップを管理する。
+ * 【概要】
+ * Linux カーネルにおけるシステムコール処理の流れを模倣したシミュレータ。
+ * ユーザ空間のプログラムがカーネルの機能を利用する際の一連の遷移:
+ *   ユーザモード → トラップ (INT 0x80 / syscall 命令) → カーネルモード → リターン
+ * をステップごとに再現し、各状態変化をトレースとして記録する。
+ *
+ * 【システムコールの仕組み】
+ * ユーザ空間のプロセスはカーネル空間に直接アクセスできない（特権レベルの分離）。
+ * ハードウェアやOS機能を利用するには、以下の手順でカーネルに制御を移す:
+ *   1. システムコール番号を RAX レジスタにセット（x86-64 の場合）
+ *   2. 引数を RDI, RSI, RDX, R10, R8, R9 レジスタにセット
+ *   3. `syscall` 命令（または旧式の `int 0x80`）でトラップを発生させる
+ *   4. CPU が特権レベルをリング3→リング0に切り替え、カーネルのエントリポイントに飛ぶ
+ *   5. カーネルが sys_call_table からハンドラを検索して実行
+ *   6. 戻り値を RAX にセットしてユーザ空間に復帰
+ *
+ * 戻り値の規約: 成功時は 0 以上の値、失敗時は負の値（-errno）を返す。
+ *
+ * 【管理するリソース】
+ * - fd テーブル: ファイルディスクリプタとファイル/パイプ/ソケットの対応
+ * - プロセステーブル: PID, 親PID, 実行状態, プロセス名
+ * - メモリマップ: テキスト/データ/ヒープ/スタック/mmap 領域
+ * - VFS (仮想ファイルシステム): シミュレーション用のファイルツリー
+ *
+ * 【対応するシステムコールのカテゴリ】
+ * - ファイル I/O: open, read, write, close, lseek, stat
+ * - プロセス管理: fork, execve, exit, wait, getpid, getppid, kill
+ * - メモリ管理: brk, mmap, munmap
+ * - IPC (プロセス間通信): pipe, dup2, socket, bind, listen, accept, connect
+ * - システム情報: uname
+ *
+ * 【参考: strace による実際のトレース例】
+ * strace コマンドを使うと、実際の Linux プロセスのシステムコール呼び出しを観察できる。
+ * 例: `strace -e trace=open,read,write cat /etc/hostname`
+ * このシミュレータの trace 配列は strace の出力に相当する情報を提供する。
+ *
+ * 【参考: VDSO (Virtual Dynamic Shared Object)】
+ * gettimeofday や clock_gettime のような頻繁に呼ばれるシステムコールは、
+ * VDSO 最適化によりカーネル空間への遷移なしにユーザ空間で実行できる。
+ * 本シミュレータでは VDSO は対象外とし、全てカーネル遷移を経由する。
  */
 
 // ── 型定義 ──
+// カーネルが管理するデータ構造のインターフェース群。
+// 実際の Linux カーネルでは C の構造体として定義されるものに対応する。
 
-/** ファイルディスクリプタエントリ */
+/**
+ * ファイルディスクリプタエントリ
+ *
+ * カーネル内の files_struct に相当する。各プロセスはこのテーブルを持ち、
+ * fd (整数) をキーにしてオープン中のファイル/パイプ/ソケット等を管理する。
+ * 標準入力=0, 標準出力=1, 標準エラー出力=2 が慣例的に予約されている。
+ */
 export interface FdEntry {
+  /** ファイルディスクリプタ番号 (0 以上の整数、小さい番号から順に割り当て) */
   fd: number;
+  /** ファイルパスまたはパイプ/ソケットの識別子 */
   path: string;
+  /** オープンフラグ ("r"=読み取り, "w"=書き込み, "rw"=読み書き) */
   flags: string;
+  /** 現在の読み書き位置 (バイトオフセット) */
   offset: number;
+  /** エントリの種別: 通常ファイル, パイプ(読み/書き), ソケット, デバイスファイル */
   type: "file" | "pipe_r" | "pipe_w" | "socket" | "device";
 }
 
-/** プロセス情報 */
+/**
+ * プロセス情報
+ *
+ * カーネル内の task_struct に相当する。各プロセスの識別情報と実行状態を保持する。
+ * state のライフサイクル: running → sleeping ⇄ running → zombie → (wait で回収)
+ */
 export interface ProcessInfo {
+  /** プロセスID (Process ID) — プロセスを一意に識別する正の整数 */
   pid: number;
+  /** 親プロセスID (Parent PID) — このプロセスを fork した親の PID */
   ppid: number;
+  /**
+   * プロセスの実行状態:
+   * - running: CPU で実行中 or 実行可能キューで待機中
+   * - sleeping: I/O 待ちなどでスリープ中
+   * - zombie: 終了済みだが親が wait で回収していない状態
+   * - stopped: シグナル (SIGSTOP/SIGTSTP) により停止中
+   */
   state: "running" | "sleeping" | "zombie" | "stopped";
+  /** プロセス名 (実行ファイル名) */
   name: string;
+  /** 終了コード (exit 時に設定される。シグナルによる終了は 128+シグナル番号) */
   exitCode?: number;
 }
 
-/** メモリ領域 */
+/**
+ * メモリ領域
+ *
+ * カーネル内の vm_area_struct に相当する。プロセスの仮想アドレス空間内の
+ * 各領域 (テキスト, データ, ヒープ, スタック, mmap) を表現する。
+ * 実際のプロセスのメモリマップは /proc/[pid]/maps で確認できる。
+ */
 export interface MemRegion {
+  /** 領域の開始仮想アドレス */
   start: number;
+  /** 領域のサイズ (バイト) */
   size: number;
+  /** パーミッション文字列 (例: "r-xp"=読み取り+実行+プライベート, "rw-p"=読み書き+プライベート) */
   perm: string;
+  /** 領域の名前 (例: "[text]", "[heap]", "[stack]", "[anon:mmap]") */
   name: string;
 }
 
-/** VFS ノード */
+/**
+ * VFS (Virtual File System) ノード
+ *
+ * Linux の VFS 層における inode に相当する。ファイルの種類、内容、パーミッションを保持する。
+ * VFS は複数のファイルシステム (ext4, tmpfs, devtmpfs 等) を統一的に扱う抽象化レイヤーである。
+ */
 export interface VfsNode {
+  /** ノードの種別: 通常ファイル, ディレクトリ, デバイスファイル */
   type: "file" | "dir" | "device";
+  /** ファイルの内容 (シミュレーション用に文字列として保持) */
   content: string;
+  /** パーミッション (8進数表記。例: 0o644 = rw-r--r--) */
   perm: number;
 }
 
-/** トレースのステップ */
+/**
+ * トレースのステップ
+ *
+ * システムコール実行過程の各段階を記録する。strace コマンドの出力に類似した
+ * デバッグ情報を提供する。各モードはシステムコール処理の段階に対応する。
+ */
 export interface TraceStep {
+  /**
+   * 処理段階:
+   * - user: ユーザ空間でのシステムコール呼び出し (C ライブラリのラッパー関数)
+   * - trap: トラップ命令 (int 0x80 / syscall) によるカーネルへの遷移
+   * - kernel: カーネル空間での処理 (sys_call_table によるディスパッチ後)
+   * - return: カーネルからユーザ空間への復帰 (RAX に戻り値をセット)
+   * - error: エラー発生 (errno が設定される)
+   */
   mode: "user" | "trap" | "kernel" | "return" | "error";
+  /** この段階での詳細情報 (人間が読める形式) */
   detail: string;
 }
 
-/** システムコール実行結果 */
+/**
+ * システムコール実行結果
+ *
+ * 各システムコールの完了後に返される結果。Linux の慣例に従い、
+ * 成功時は returnValue ≥ 0、失敗時は returnValue = -1 かつ errno にエラー番号がセットされる。
+ */
 export interface SyscallResult {
+  /** 戻り値 (成功時: 0以上の値、失敗時: -1) */
   returnValue: number;
+  /** エラー番号 (成功時: 0、失敗時: ERRNO テーブルの値) */
   errno: number;
+  /** エラー名 (例: "ENOENT", "EBADF"。成功時は空文字列) */
   errname: string;
+  /** 実行過程のトレース (user → trap → kernel → return の各ステップ) */
   trace: TraceStep[];
 }
 
-/** カーネル状態のスナップショット */
+/**
+ * カーネル状態のスナップショット
+ *
+ * ある時点でのカーネルの主要データ構造の読み取り専用コピー。
+ * UI がカーネル状態を表示する際に使用する。各フィールドはコピーなので
+ * 変更してもカーネル内部の状態には影響しない。
+ */
 export interface KernelSnapshot {
+  /** オープン中のファイルディスクリプタ一覧 */
   fdTable: FdEntry[];
+  /** 全プロセスの一覧 */
   processes: ProcessInfo[];
+  /** メモリマップの領域一覧 */
   memory: MemRegion[];
 }
 
-/** システムコール呼び出し */
+/**
+ * システムコール呼び出し
+ *
+ * ユーザプログラムからのシステムコール要求を表現する。
+ * 実際の Linux では、glibc のラッパー関数がレジスタにセットして syscall 命令を発行する。
+ */
 export interface SyscallInvocation {
-  /** C 風の呼び出し表記 */
+  /** C 風の呼び出し表記 (表示用。例: 'fd = open("/etc/hostname", O_RDONLY)') */
   code: string;
-  /** システムコール名 */
+  /** システムコール名 (例: "open", "fork", "mmap") */
   name: string;
-  /** 引数 */
+  /** 引数の配列 (システムコールごとに型と個数が異なる) */
   args: unknown[];
 }
 
-// ── エラー番号 ──
+// ── エラー番号 (errno) ──
+// Linux カーネルはエラーを整数の errno 値で表現する。
+// システムコールが失敗すると、戻り値は -1 となり、
+// カーネル内部では -errno の値（例: -ENOENT = -2）を返す。
+// ユーザ空間の C ライブラリが負の値を検出し、errno グローバル変数にセットする。
+// 各定数の意味:
+//   ENOENT (2): ファイルまたはディレクトリが存在しない (No such file or directory)
+//   EBADF  (9): 無効なファイルディスクリプタ (Bad file descriptor)
+//   ECHILD(10): 子プロセスが存在しない (No child processes)
+//   EAGAIN(11): リソースが一時的に利用不可 (Try again)
+//   ENOMEM(12): メモリ不足 (Out of memory)
+//   EACCES(13): 権限が不足 (Permission denied)
+//   EEXIST(17): ファイルが既に存在する (File exists)
+//   EINVAL(22): 無効な引数 (Invalid argument)
+//   EMFILE(24): オープン可能なファイル数の上限超過 (Too many open files)
+//   ENOSYS(38): 未実装のシステムコール (Function not implemented)
+//   EADDRINUSE (98): アドレスが既に使用中 (Address already in use)
+//   ECONNREFUSED(111): 接続が拒否された (Connection refused)
 
 const ERRNO: Record<string, number> = {
   ENOENT: 2,
@@ -89,17 +228,30 @@ const ERRNO: Record<string, number> = {
 };
 
 // ── カーネル ──
+// シミュレーション用カーネルの本体。
+// 実際の Linux カーネルの主要サブシステム (VFS, プロセス管理, メモリ管理, IPC) を
+// 簡略化して再現している。
 
 export class Kernel {
+  /** オープン中のファイルディスクリプタテーブル (カーネル内の files_struct に相当) */
   private fdTable: FdEntry[] = [];
+  /** プロセステーブル (カーネル内の task_struct のリストに相当) */
   private processes: ProcessInfo[] = [];
+  /** 仮想メモリマップ (カーネル内の mm_struct → vm_area_struct のリストに相当) */
   private memory: MemRegion[] = [];
+  /** 仮想ファイルシステム (VFS レイヤー。パス → inode のマッピング) */
   private vfs = new Map<string, VfsNode>();
+  /** 次に割り当てる fd 番号 (0,1,2 は標準入出力で予約済み) */
   private nextFd = 3;
+  /** 次に割り当てる PID (init=1, user_prog=100 の次から) */
   private nextPid = 101;
+  /** 現在のヒープブレーク位置 (brk システムコールで伸長される) */
   private heapBreak = 0x0040_0000;
+  /** 次の mmap 割り当てアドレス (スタックの下方に向かって配置) */
   private nextMmapAddr = 0x7f00_0000;
+  /** パイプの通し番号 (pipe:[N] の N に使用) */
   private pipeCounter = 0;
+  /** ソケットの通し番号 (socket:[N] の N に使用) */
   private socketCounter = 0;
 
   constructor() {

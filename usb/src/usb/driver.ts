@@ -1,6 +1,10 @@
 /**
- * USBドライバスタック
- * ホストコントローラドライバ → USBコア → デバイスドライバ の3層構造
+ * USBドライバスタックモジュール
+ *
+ * ホストコントローラドライバ → USBコア → デバイスドライバ の3層構造を実装する。
+ * エニュメレーション（デバイス列挙）、コントロール転送、Bulk転送、Interrupt転送の
+ * シミュレーションを行い、各ステップのイベントをリアルタイムに発行する。
+ * HID・マスストレージ・オーディオの各クラスドライバも内蔵している。
  */
 
 import {
@@ -15,6 +19,7 @@ import {
 } from "../hw/hardware.js";
 
 // ========== ドライバイベント ==========
+/** ドライバが発行するイベントの種別（エニュメレーション・転送・エラー等を分類する） */
 export type DriverEventType =
   | "reset"           // バスリセット
   | "port_scan"       // ポートスキャン
@@ -30,6 +35,7 @@ export type DriverEventType =
   | "disconnect"      // 切断検出
   | "log";            // 一般ログ
 
+/** ドライバイベントの構造（タイムスタンプ・種別・詳細情報を含む） */
 export interface DriverEvent {
   type: DriverEventType;
   timestamp: number;
@@ -41,6 +47,7 @@ export interface DriverEvent {
 }
 
 // ========== デバイスドライバ (各クラス用) ==========
+/** USBデバイスドライバのインターフェース（各デバイスクラス用のprobe/attachメソッドを定義する） */
 export interface UsbDeviceDriver {
   name: string;
   supportedClass: UsbClass;
@@ -50,7 +57,12 @@ export interface UsbDeviceDriver {
   attach(device: UsbDevice): string;
 }
 
-/** HIDドライバ (キーボード/マウス) */
+/**
+ * HIDドライバ（キーボード/マウス用）
+ *
+ * HIDクラスのデバイスを検出し、デバイスプロトコルに応じて
+ * キーボード（proto=1）またはマウス（proto=2）として識別する。
+ */
 const hidDriver: UsbDeviceDriver = {
   name: "usbhid",
   supportedClass: UsbClass.HID,
@@ -68,7 +80,12 @@ const hidDriver: UsbDeviceDriver = {
   },
 };
 
-/** マスストレージドライバ */
+/**
+ * マスストレージドライバ
+ *
+ * マスストレージクラスのデバイスを検出し、SCSIデバイスとして初期化する。
+ * データバッファのサイズ情報をバインド結果に含める。
+ */
 const massStorageDriver: UsbDeviceDriver = {
   name: "usb-storage",
   supportedClass: UsbClass.MassStorage,
@@ -84,7 +101,12 @@ const massStorageDriver: UsbDeviceDriver = {
   },
 };
 
-/** オーディオドライバ */
+/**
+ * オーディオドライバ
+ *
+ * オーディオクラスのデバイスを検出し、サウンドデバイスとして初期化する。
+ * AudioControlおよびAudioStreamingインターフェースに対応する。
+ */
 const audioDriver: UsbDeviceDriver = {
   name: "snd-usb-audio",
   supportedClass: UsbClass.Audio,
@@ -103,12 +125,29 @@ const audioDriver: UsbDeviceDriver = {
 const registeredDrivers: UsbDeviceDriver[] = [hidDriver, massStorageDriver, audioDriver];
 
 // ========== USBコア (ドライバスタック本体) ==========
+/**
+ * USBコアクラス（ドライバスタックの中心）
+ *
+ * ホストコントローラを介してデバイスのエニュメレーション（列挙）と
+ * データ転送を管理する。各操作ステップでDriverEventを発行し、
+ * UIやログへのリアルタイム通知を可能にする。
+ * delayMsパラメータでシミュレーション速度を制御できる。
+ */
 export class UsbCore {
+  /** 管理対象のホストコントローラ */
   private hc: UsbHostController;
+  /** 発行されたイベントの履歴 */
   private events: DriverEvent[] = [];
+  /** 各操作ステップ間の遅延時間（ミリ秒） */
   private delayMs: number;
+  /** イベント発行時に呼ばれるコールバック関数 */
   onEvent?: (event: DriverEvent) => void;
 
+  /**
+   * USBコアを初期化する
+   * @param hc - 管理対象のホストコントローラ
+   * @param delayMs - 操作間の遅延時間（ミリ秒、デフォルト50ms）
+   */
   constructor(hc: UsbHostController, delayMs: number = 50) {
     this.hc = hc;
     this.delayMs = delayMs;
@@ -135,7 +174,13 @@ export class UsbCore {
 
   // ========== コントロール転送のシミュレーション ==========
 
-  /** SETUPパケットを送信 (コントロール転送のセットアップフェーズ) */
+  /**
+   * SETUPパケットを送信する（コントロール転送のセットアップフェーズ）
+   * @param address - 送信先デバイスアドレス
+   * @param endpoint - 送信先エンドポイント番号
+   * @param setupData - 8バイトのセットアップデータ
+   * @returns 送信したUSBパケット
+   */
   private sendSetupPacket(address: number, endpoint: number, setupData: Uint8Array): UsbPacket {
     const packet: UsbPacket = {
       pid: "SETUP",
@@ -152,7 +197,14 @@ export class UsbCore {
     return packet;
   }
 
-  /** DATAパケットを送信 */
+  /**
+   * DATAパケットを送信する（DATA0/DATA1のトグルビットで順序保証）
+   * @param address - 送信先デバイスアドレス
+   * @param endpoint - 送信先エンドポイント番号
+   * @param data - 送信データ
+   * @param toggle - トグルビット（0=DATA0, 1=DATA1）
+   * @returns 送信したUSBパケット
+   */
   private sendDataPacket(address: number, endpoint: number, data: Uint8Array, toggle: 0 | 1): UsbPacket {
     const pid = toggle === 0 ? "DATA0" : "DATA1";
     const packet: UsbPacket = { pid, address, endpoint, data };
@@ -165,7 +217,12 @@ export class UsbCore {
     return packet;
   }
 
-  /** ACKパケットを受信 */
+  /**
+   * ACKパケットを受信する（デバイスからの確認応答をシミュレート）
+   * @param address - デバイスアドレス
+   * @param endpoint - エンドポイント番号
+   * @returns 受信したACKパケット
+   */
   private receiveAck(address: number, endpoint: number): UsbPacket {
     const packet: UsbPacket = { pid: "ACK", address, endpoint };
     this.emit({
@@ -178,6 +235,13 @@ export class UsbCore {
   }
 
   // ========== GET_DESCRIPTOR コントロール転送 ==========
+  /**
+   * GET_DESCRIPTORリクエストのセットアップデータを構築する
+   * @param type - ディスクリプタタイプ（1=デバイス, 2=コンフィグ等）
+   * @param index - ディスクリプタインデックス
+   * @param length - 要求するデータ長（バイト）
+   * @returns 8バイトのセットアップパケットデータ
+   */
   private buildGetDescriptorSetup(type: number, index: number, length: number): Uint8Array {
     // bmRequestType=0x80 (Device→Host), bRequest=0x06 (GET_DESCRIPTOR)
     const buf = new Uint8Array(8);
@@ -193,6 +257,11 @@ export class UsbCore {
   }
 
   // ========== SET_ADDRESS コントロール転送 ==========
+  /**
+   * SET_ADDRESSリクエストのセットアップデータを構築する
+   * @param address - 割り当てるデバイスアドレス（1-127）
+   * @returns 8バイトのセットアップパケットデータ
+   */
   private buildSetAddressSetup(address: number): Uint8Array {
     // bmRequestType=0x00 (Host→Device), bRequest=0x05 (SET_ADDRESS)
     const buf = new Uint8Array(8);

@@ -22,7 +22,7 @@
  *   - $(cmd) `cmd`     : コマンド置換
  */
 
-// トークン
+/** トークンの型定義。レキサーが生成するすべてのトークン種別を表す */
 export type Token =
   | { type: "word"; value: string }
   | { type: "pipe" }          // |
@@ -35,7 +35,7 @@ export type Token =
   | { type: "redirect_fd"; srcFd: number; dstFd: number } // 2>&1
   | { type: "eof" };
 
-// AST: コマンド
+/** AST: 単純コマンドノード。引数・リダイレクト・バックグラウンド実行フラグを持つ */
 export interface SimpleCommand {
   type: "simple";
   args: string[];           // ["echo", "hello"]
@@ -43,23 +43,30 @@ export interface SimpleCommand {
   background: boolean;
 }
 
+/** リダイレクト情報。入出力先のファイルとファイルディスクリプタを保持 */
 export interface Redirect {
   type: "out" | "append" | "in";
   fd: number;               // 1=stdout, 2=stderr
   target: string;           // ファイル名
 }
 
+/** パイプラインノード。パイプ(|)で接続された一連のコマンドを表す */
 export interface PipelineNode {
   type: "pipeline";
   commands: SimpleCommand[];
 }
 
+/** リストノード。セミコロンや&&、||で接続されたパイプラインの列を表す */
 export interface ListNode {
   type: "list";
   pipelines: { pipeline: PipelineNode; operator: ";" | "&&" | "||" | "" }[];
 }
 
-// レキサー
+/**
+ * レキサー: 入力文字列をトークン列に分割する
+ * @param input - シェルコマンドの入力文字列
+ * @returns トークンの配列（末尾にeofトークンを含む）
+ */
 export function tokenize(input: string): Token[] {
   const tokens: Token[] = [];
   let pos = 0;
@@ -147,7 +154,12 @@ export function tokenize(input: string): Token[] {
   return tokens;
 }
 
-// パーサー
+/**
+ * パーサー: 入力文字列をAST（抽象構文木）に変換する
+ * トークナイズ後、再帰下降パーサーでListNode → PipelineNode → SimpleCommandの階層構造を構築する
+ * @param input - シェルコマンドの入力文字列
+ * @returns パース結果のListNode（ASTのルートノード）
+ */
 export function parse(input: string): ListNode {
   const tokens = tokenize(input);
   let pos = 0;

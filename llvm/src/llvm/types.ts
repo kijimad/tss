@@ -1,4 +1,16 @@
-/** ──── LLVM IR 型システム ──── */
+/**
+ * @module types
+ * LLVM IR シミュレーターの型定義モジュール。
+ * IR の型システム、SSA 値、命令、基本ブロック、関数、モジュール、
+ * 最適化パス、レジスタ割り当て、コード生成、シミュレーションに
+ * 必要な全てのデータ構造を定義する。
+ */
+
+/** ──── LLVM IR 型システム ────
+ * LLVM IR で使用される全ての型を表す判別共用体。
+ * void, 整数型 (i1〜i64), 浮動小数点型, ポインタ, 配列,
+ * 構造体, 関数型, ラベルをサポートする。
+ */
 export type IRType =
   | { kind: "void" }
   | { kind: "i1" }
@@ -14,7 +26,11 @@ export type IRType =
   | { kind: "function"; retType: IRType; paramTypes: IRType[] }
   | { kind: "label" };
 
-/** 型を文字列に */
+/**
+ * IR 型を LLVM IR テキスト表現の文字列に変換する。
+ * @param t - 変換対象の IR 型
+ * @returns LLVM IR 形式の型文字列 (例: "i32", "[4 x i32]", "%MyStruct")
+ */
 export function typeToString(t: IRType): string {
   switch (t.kind) {
     case "void": return "void";
@@ -29,7 +45,12 @@ export function typeToString(t: IRType): string {
   }
 }
 
-/** ──── SSA 値 ──── */
+/**
+ * ──── SSA 値 ────
+ * 静的単一代入 (SSA) 形式における値を表す。
+ * 各値は一度だけ定義され、use-def チェーンにより
+ * 使用箇所を追跡する。
+ */
 export interface SSAValue {
   name: string;            // %0, %x, @global 等
   type: IRType;
@@ -38,7 +59,12 @@ export interface SSAValue {
   uses: string[];
 }
 
-/** ──── LLVM IR 命令 ──── */
+/**
+ * ──── LLVM IR 命令オペコード ────
+ * LLVM IR の全命令セットを表す文字列リテラル型。
+ * 算術演算、ビット演算、比較、型変換、メモリ操作、
+ * 制御フロー、PHI/select、関数呼び出しを含む。
+ */
 export type IROpcode =
   // 算術
   | "add" | "sub" | "mul" | "sdiv" | "udiv" | "srem" | "urem"
@@ -61,11 +87,15 @@ export type IROpcode =
   // その他
   | "nop";
 
-/** 比較述語 */
+/** 整数比較述語 (icmp 命令用) — 符号付き/符号なしの比較条件 */
 export type ICmpPred = "eq" | "ne" | "sgt" | "sge" | "slt" | "sle" | "ugt" | "uge" | "ult" | "ule";
+/** 浮動小数点比較述語 (fcmp 命令用) — 順序付き/順序なしの比較条件 */
 export type FCmpPred = "oeq" | "one" | "ogt" | "oge" | "olt" | "ole" | "ord" | "uno";
 
-/** 命令 */
+/**
+ * LLVM IR 命令を表すインターフェース。
+ * オペコード、結果レジスタ、オペランド、最適化メタデータを保持する。
+ */
 export interface IRInsn {
   id: string;              // 一意ID
   op: IROpcode;
@@ -90,6 +120,10 @@ export interface IRInsn {
   optimized?: boolean;
 }
 
+/**
+ * IR 命令のオペランドを表す判別共用体。
+ * レジスタ参照、即値定数、ラベル、グローバル変数、undef をサポートする。
+ */
 export type IROperand =
   | { kind: "reg"; name: string; type: IRType }     // %name
   | { kind: "const"; value: number; type: IRType }   // 即値
@@ -97,7 +131,11 @@ export type IROperand =
   | { kind: "global"; name: string; type: IRType }   // @name
   | { kind: "undef"; type: IRType };                 // undef
 
-/** 基本ブロック */
+/**
+ * 基本ブロック — 制御フローグラフ (CFG) の基本単位。
+ * 直線的に実行される命令列と、前後のブロックへの接続、
+ * 支配木情報、ループ情報を保持する。
+ */
 export interface BasicBlock {
   label: string;
   insns: IRInsn[];
@@ -111,7 +149,10 @@ export interface BasicBlock {
   isLoopHeader: boolean;
 }
 
-/** 関数定義 */
+/**
+ * IR 関数定義。
+ * 名前、戻り値型、パラメータ、基本ブロック列、SSA 値テーブルで構成される。
+ */
 export interface IRFunction {
   name: string;
   retType: IRType;
@@ -121,14 +162,21 @@ export interface IRFunction {
   values: Map<string, SSAValue>;
 }
 
-/** モジュール (翻訳単位) */
+/**
+ * IR モジュール — LLVM の翻訳単位に相当。
+ * 関数定義、グローバル変数、構造体定義を含む。
+ */
 export interface IRModule {
   functions: IRFunction[];
   globals: { name: string; type: IRType; init?: IROperand }[];
   structs: { name: string; fields: IRType[] }[];
 }
 
-/** ──── 最適化パス ──── */
+/**
+ * ──── 最適化パス ────
+ * LLVM の最適化パスの種類を表す文字列リテラル型。
+ * 各パスは IR を変換して性能向上やコードサイズ削減を行う。
+ */
 export type PassKind =
   | "mem2reg"              // alloca → SSA (phi 挿入)
   | "constant_fold"        // 定数畳み込み
@@ -141,6 +189,7 @@ export type PassKind =
   | "sroa"                 // スカラー置換
   | "tailcall";            // 末尾呼び出し最適化
 
+/** 最適化パスの実行結果。パス前後の IR テキストと変更一覧を保持する。 */
 export interface PassResult {
   pass: PassKind;
   description: string;
@@ -149,6 +198,7 @@ export interface PassResult {
   irAfter: string;
 }
 
+/** 最適化パスによる個々の変更内容を表す。 */
 export interface PassChange {
   type: "eliminate" | "replace" | "insert" | "move" | "fold";
   target: string;            // 命令ID or ブロックラベル
@@ -157,7 +207,11 @@ export interface PassChange {
   after?: string;
 }
 
-/** ──── レジスタ割り当て ──── */
+/**
+ * ──── レジスタ割り当て ────
+ * 仮想レジスタの生存区間を表す。
+ * 線形スキャンアルゴリズムで物理レジスタへの割り当てやスピルを決定する。
+ */
 export interface LiveInterval {
   vreg: string;              // 仮想レジスタ名
   start: number;             // 生存開始位置
@@ -167,11 +221,13 @@ export interface LiveInterval {
   spillSlot?: number;        // スピルスロット番号
 }
 
+/** 干渉グラフのエッジ — 同時に生存する2つの仮想レジスタの組。 */
 export interface InterferenceEdge {
   a: string;
   b: string;
 }
 
+/** レジスタ割り当ての結果。生存区間、干渉グラフ、割り当てマッピング、スピル情報を含む。 */
 export interface RegAllocResult {
   intervals: LiveInterval[];
   interference: InterferenceEdge[];
@@ -180,14 +236,23 @@ export interface RegAllocResult {
   spills: string[];
 }
 
-/** ──── コード生成 ──── */
+/**
+ * ──── コード生成 ────
+ * ターゲットマシン (x86-64) の命令を表す。
+ * IR からの変換後に生成されるアセンブリ命令。
+ */
 export interface MachineInsn {
   op: string;                // mov, add, sub, cmp, jmp 等
   operands: string[];
   comment?: string;
 }
 
-/** ──── シミュレーション ──── */
+/**
+ * ──── シミュレーション ────
+ * シミュレーション操作を表す判別共用体。
+ * モジュール定義、IR 表示、最適化パス実行、支配木構築、
+ * レジスタ割り当て、コード生成、IR 実行などの操作を定義する。
+ */
 export type SimOp =
   | { type: "define_module"; module: IRModule }
   | { type: "show_ir"; functionName: string }
@@ -199,7 +264,10 @@ export type SimOp =
   | { type: "execute_ir"; functionName: string; args: number[] }
   | { type: "snapshot" };
 
-/** イベント種別 */
+/**
+ * シミュレーション中に発生するイベントの種別。
+ * UI のイベントログで色分け表示に使用される。
+ */
 export type EventType =
   | "ir"                     // IR 表示
   | "pass"                   // 最適化パス
@@ -217,7 +285,7 @@ export type EventType =
   | "info"
   | "error";
 
-/** イベント */
+/** シミュレーションイベント — ステップ番号、種別、説明、詳細を保持する。 */
 export interface SimEvent {
   step: number;
   type: EventType;
@@ -225,7 +293,11 @@ export interface SimEvent {
   detail?: string;
 }
 
-/** シミュレーション結果 */
+/**
+ * シミュレーション全体の結果。
+ * イベントログ、最適化後のモジュール、パス結果、レジスタ割り当て、
+ * マシンコード、実行結果、統計情報を集約する。
+ */
 export interface SimulationResult {
   events: SimEvent[];
   module: IRModule;
@@ -245,7 +317,10 @@ export interface SimulationResult {
   };
 }
 
-/** プリセット */
+/**
+ * 実験プリセット — セレクトボックスから選択可能な定義済みシミュレーション。
+ * 名前、説明、操作列で構成される。
+ */
 export interface Preset {
   name: string;
   description: string;

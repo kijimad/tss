@@ -27,12 +27,12 @@
  */
 import {
   DH_PARAMS, dhGenerateKeyPair, dhComputeSharedSecret,
-  symmetricEncrypt, symmetricDecrypt, simpleHash,
-  generateKeyPair, sign, verify, formatFingerprint,
+  symmetricEncrypt, simpleHash,
+  generateKeyPair, sign, formatFingerprint,
   type DhKeyPair, type KeyPair,
 } from "../crypto/crypto.js";
 
-// SSH メッセージ型
+/** SSH プロトコルで送受信されるメッセージの型定義 */
 export type SshMessage =
   | { type: "version"; version: string }
   | { type: "kexinit"; algorithms: string[] }
@@ -49,7 +49,7 @@ export type SshMessage =
   | { type: "channel_close"; channelId: number }
   | { type: "disconnect"; reason: string };
 
-// SSH イベント（可視化用）
+/** SSH イベント（UI側でプロトコルトレースを可視化するために使用） */
 export type SshEvent =
   | { type: "send"; from: "client" | "server"; message: SshMessage; encrypted: boolean; raw: string }
   | { type: "crypto"; operation: string; detail: string }
@@ -57,7 +57,12 @@ export type SshEvent =
   | { type: "channel"; action: string; detail: string }
   | { type: "info"; message: string };
 
-// SSH サーバ
+/**
+ * SSH サーバのエミュレーション
+ *
+ * ホスト鍵の保持、ユーザ認証（パスワード/公開鍵）、
+ * 仮想ファイルシステム上でのコマンド実行を行う。
+ */
 export class SshServer {
   readonly hostname: string;
   readonly ip: string;
@@ -66,6 +71,11 @@ export class SshServer {
   private users: Map<string, { password: string; authorizedKeys: string[] }>;
   private filesystem: Map<string, string>;
 
+  /**
+   * サーバインスタンスを初期化する
+   * @param hostname - サーバのホスト名
+   * @param ip - サーバのIPアドレス
+   */
   constructor(hostname: string, ip: string) {
     this.hostname = hostname;
     this.ip = ip;
@@ -84,11 +94,23 @@ export class SshServer {
     ]);
   }
 
+  /**
+   * ユーザの authorized_keys に公開鍵を追加する
+   * @param username - 対象ユーザ名
+   * @param publicKey - 登録する公開鍵
+   */
   addAuthorizedKey(username: string, publicKey: string): void {
     const user = this.users.get(username);
     if (user !== undefined) user.authorizedKeys.push(publicKey);
   }
 
+  /**
+   * ユーザ認証を行う
+   * @param username - 認証するユーザ名
+   * @param method - 認証方式（"password" または "publickey"）
+   * @param credential - パスワードまたは公開鍵文字列
+   * @returns 認証成功なら true
+   */
   authenticate(username: string, method: string, credential: string): boolean {
     const user = this.users.get(username);
     if (user === undefined) return false;
@@ -97,6 +119,16 @@ export class SshServer {
     return false;
   }
 
+  /**
+   * シェルコマンドを実行し結果を返す
+   *
+   * 仮想ファイルシステム上で基本的なLinuxコマンドをエミュレートする。
+   * 対応コマンド: echo, whoami, hostname, uname, pwd, id, uptime, date, cat, ls, w, df, free, ip, exit
+   *
+   * @param command - 実行するコマンド文字列
+   * @param username - 実行ユーザ名
+   * @returns コマンドの出力文字列（"__EXIT__" は切断要求）
+   */
   executeCommand(command: string, username: string): string {
     const parts = command.trim().split(/\s+/);
     const cmd = parts[0] ?? "";
@@ -140,7 +172,13 @@ export class SshServer {
   }
 }
 
-// SSH 接続セッション
+/**
+ * SSH 接続セッション
+ *
+ * クライアントとサーバ間の SSH ハンドシェイク（バージョン交換、鍵交換、認証、
+ * セッション確立）を一連の流れとして実行し、コマンドの送受信を管理する。
+ * 各ステップで発行される SshEvent を通じて UI 側でプロトコルの可視化が可能。
+ */
 export class SshSession {
   private server: SshServer;
   private clientDhKeys: DhKeyPair | undefined;
@@ -153,13 +191,31 @@ export class SshSession {
   events: SshEvent[] = [];
   onEvent: ((event: SshEvent) => void) | undefined;
 
+  /**
+   * @param server - 接続先の SSH サーバ
+   */
   constructor(server: SshServer) {
     this.server = server;
   }
 
+  /** イベントを記録し、登録されたリスナーに通知する */
   private emit(event: SshEvent): void { this.events.push(event); this.onEvent?.(event); }
 
-  // 接続確立（全ハンドシェイクを実行）
+  /**
+   * SSH 接続を確立する（全ハンドシェイクを実行）
+   *
+   * 以下の4フェーズを順に実行する:
+   *   1. バージョン交換
+   *   2. Diffie-Hellman 鍵交換（共有秘密の生成と暗号化チャネルの確立）
+   *   3. ユーザ認証（パスワードまたは公開鍵）
+   *   4. セッション確立とシェル起動
+   *
+   * @param username - 認証するユーザ名
+   * @param method - 認証方式
+   * @param credential - パスワードまたは公開鍵
+   * @param clientKeyPair - 公開鍵認証時のクライアント鍵ペア（省略可）
+   * @returns 接続成功なら true
+   */
   connect(username: string, method: "password" | "publickey", credential: string, clientKeyPair?: KeyPair): boolean {
     this.events = [];
     this.username = username;
@@ -248,7 +304,14 @@ export class SshSession {
     return true;
   }
 
-  // コマンド実行
+  /**
+   * リモートサーバ上でコマンドを実行する
+   *
+   * コマンドを暗号化してサーバに送信し、実行結果を暗号化チャネル経由で受け取る。
+   *
+   * @param command - 実行するコマンド文字列
+   * @returns コマンドの出力（未接続時はエラーメッセージ）
+   */
   executeCommand(command: string): string {
     if (!this.authenticated || !this.channelOpen) return "Error: not connected\n";
 
@@ -271,7 +334,7 @@ export class SshSession {
     return output;
   }
 
-  // 切断
+  /** SSH 接続を切断し、セッションをクリーンアップする */
   disconnect(): void {
     this.sendMessage("client", { type: "disconnect", reason: "user request" }, true);
     this.channelOpen = false;
@@ -279,10 +342,22 @@ export class SshSession {
     this.emit({ type: "info", message: "Connection closed." });
   }
 
+  /** 接続中かどうかを返す */
   isConnected(): boolean { return this.authenticated && this.channelOpen; }
+  /** 認証済みユーザ名を返す */
   getUsername(): string { return this.username; }
+  /** 接続先サーバのホスト名を返す */
   getHostname(): string { return this.server.hostname; }
 
+  /**
+   * SSH メッセージを送信する（イベントとして記録）
+   *
+   * 暗号化フラグが有効かつ暗号鍵が設定済みの場合、メッセージを暗号化する。
+   *
+   * @param from - 送信元（"client" または "server"）
+   * @param message - 送信する SSH メッセージ
+   * @param encrypted - 暗号化するかどうか
+   */
   private sendMessage(from: "client" | "server", message: SshMessage, encrypted: boolean): void {
     let raw = JSON.stringify(message);
     if (encrypted && this.encryptionKey !== undefined) {
@@ -291,6 +366,11 @@ export class SshSession {
     this.emit({ type: "send", from, message, encrypted, raw });
   }
 
+  /**
+   * チャネルデータを送信する（コマンドやコマンド出力の送受信に使用）
+   * @param from - 送信元
+   * @param data - 送信するデータ文字列
+   */
   private sendData(from: "client" | "server", data: string): void {
     const encrypted = this.encryptionKey !== undefined ? symmetricEncrypt(data, this.encryptionKey) : data;
     this.emit({ type: "send", from, message: { type: "channel_data", data, encrypted }, encrypted: this.encryptionKey !== undefined, raw: encrypted });

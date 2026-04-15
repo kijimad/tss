@@ -16,7 +16,12 @@
  *   attributes
  */
 
-// コンスタントプールのタグ
+/**
+ * コンスタントプールのタグ定数
+ *
+ * コンスタントプールの各エントリの種類を識別するためのタグ値。
+ * JVM仕様 §4.4 に準拠。
+ */
 export const ConstTag = {
   Utf8: 1,
   Integer: 3,
@@ -31,7 +36,12 @@ export const ConstTag = {
   NameAndType: 12,
 } as const;
 
-// コンスタントプールエントリ
+/**
+ * コンスタントプールエントリの型定義
+ *
+ * タグ値に基づく判別共用体型。各エントリの種類ごとに
+ * 異なるフィールドを持つ。
+ */
 export type ConstantPoolEntry =
   | { tag: 1; value: string }                                    // Utf8
   | { tag: 3; value: number }                                    // Integer
@@ -45,7 +55,12 @@ export type ConstantPoolEntry =
   | { tag: 11; classIndex: number; nameAndTypeIndex: number }    // InterfaceMethodref
   | { tag: 12; nameIndex: number; descriptorIndex: number };     // NameAndType
 
-// メソッド情報
+/**
+ * メソッド情報インターフェース
+ *
+ * クラスファイル内のメソッドを表現する。
+ * バイトコードは code 属性に格納される。
+ */
 export interface MethodInfo {
   accessFlags: number;
   name: string;
@@ -53,21 +68,35 @@ export interface MethodInfo {
   code: CodeAttribute | undefined;
 }
 
-// Code 属性 (バイトコード本体)
+/**
+ * Code属性インターフェース
+ *
+ * メソッドのバイトコード本体を保持する。
+ * maxStack と maxLocals はフレーム生成時に使用される。
+ */
 export interface CodeAttribute {
   maxStack: number;
   maxLocals: number;
   bytecode: Uint8Array;
 }
 
-// フィールド情報
+/**
+ * フィールド情報インターフェース
+ *
+ * クラスのインスタンスフィールドまたはスタティックフィールドを表現する。
+ */
 export interface FieldInfo {
   accessFlags: number;
   name: string;
   descriptor: string;
 }
 
-// パースされたクラスファイル
+/**
+ * パースされたクラスファイルインターフェース
+ *
+ * .classファイルの全構造をTypeScriptで表現したもの。
+ * バイナリパースまたはClassBuilderから生成される。
+ */
 export interface ClassFile {
   majorVersion: number;
   minorVersion: number;
@@ -80,7 +109,12 @@ export interface ClassFile {
   methods: MethodInfo[];
 }
 
-// アクセスフラグ
+/**
+ * アクセスフラグ定数
+ *
+ * クラス、メソッド、フィールドの可視性や属性を表すビットフラグ。
+ * JVM仕様 §4.1, §4.5, §4.6 に準拠。
+ */
 export const AccessFlag = {
   Public: 0x0001,
   Private: 0x0002,
@@ -91,7 +125,14 @@ export const AccessFlag = {
   Abstract: 0x0400,
 } as const;
 
-// JVM バイトコード命令
+/**
+ * JVMバイトコード命令（オペコード）定数
+ *
+ * JVMが実行する各命令のオペコード値を定義する。
+ * スタックマシンの命令セットとして、定数ロード、ローカル変数操作、
+ * 算術演算、分岐、メソッド呼び出し等を含む。
+ * JVM仕様 §6.5 に準拠。
+ */
 export const OpCode = {
   // 定数ロード
   nop: 0x00,
@@ -209,7 +250,12 @@ export const OpCode = {
   aastore: 0x53,
 } as const;
 
-// オペコード名のマップ
+/**
+ * オペコード値からニーモニック名への逆引きマップ
+ *
+ * デバッグや実行トレースの表示で、数値のオペコードを
+ * 人間が読める名前に変換するために使用する。
+ */
 export const OP_NAMES: Record<number, string | undefined> = {};
 for (const [name, code] of Object.entries(OpCode)) {
   (OP_NAMES)[code] = name;
